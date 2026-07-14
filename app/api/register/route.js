@@ -3,16 +3,11 @@ import { welcomeEmail } from "@/services/mail";
 import { registerValidater } from "@/validations/validate";
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
-import connectDB from "@/services/mongoConnect";
-
 export async function POST(req) {
     try {
-        await connectDB();
         const body = await req.json();
-        console.log("🚀 ~ POST ~ body:", body)
 
         const result = registerValidater.safeParse(body);
-        console.log("🚀 ~ POST ~ result:", result)
 
         if (!result.success) {
             return NextResponse.json(
@@ -24,9 +19,7 @@ export async function POST(req) {
             );
         }
 
-        console.log("🚀 ~ POST ~ body:", body)
         const exist = await User.findOne({ email: body.email });
-        console.log("🚀 ~ POST ~ exist:", exist)
 
         if (exist) {
             return NextResponse.json(
@@ -53,7 +46,6 @@ export async function POST(req) {
             message: "User created successfully",
         });
     } catch (err) {
-        console.log("🚀 ~ POST ~ err:", err.message)
         return NextResponse.json(
             {
                 success: false,

@@ -2,8 +2,11 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function RegisterPage() {
+  const router = useRouter();
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -29,15 +32,23 @@ export default function RegisterPage() {
       setIsSubmitting(false);
       return;
     }
-    else{
-      const response = await fetch("/api/register",{
-        method:"POST",
-        body:JSON.stringify(formData),
+    else {
+      const response = await fetch("/api/register", {
+        method: "POST",
+        body: JSON.stringify(formData),
       })
+      setIsSubmitting(false);
+      setFormData({
+        name: "",
+        email: "",
+        password: "",
+      });
       const result = await response.json()
-      if(result.success){
+      if (result.success) {
+        router.push('/login');
+
         return setError(result.message)
-      }else{
+      } else {
         return setError(result.message)
       }
     }
@@ -51,7 +62,7 @@ export default function RegisterPage() {
 
       <div className="w-full max-w-md relative z-10">
         <div className="bg-gray-900/50 border border-gray-800 backdrop-blur-2xl rounded-3xl p-8 sm:p-10 shadow-2xl transition-all duration-500 hover:border-gray-700 hover:shadow-indigo-500/10">
-          
+
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 mb-4 shadow-lg shadow-indigo-500/30">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -73,7 +84,7 @@ export default function RegisterPage() {
 
             <div className="space-y-4">
               {/* Name Input */}
-              <div className="relative group" style={{margin:"2px 10px"}}>
+              <div className="relative group" style={{ margin: "2px 10px" }}>
                 <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors duration-300 ${focusedInput === 'name' ? 'text-indigo-400' : 'text-gray-500'}`}>
                   {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -93,7 +104,7 @@ export default function RegisterPage() {
               </div>
 
               {/* Email Input */}
-              <div className="relative group" style={{margin:"2px 10px"}}>
+              <div className="relative group" style={{ margin: "2px 10px" }}>
                 <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors duration-300 ${focusedInput === 'email' ? 'text-indigo-400' : 'text-gray-500'}`}>
                   {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -113,7 +124,7 @@ export default function RegisterPage() {
               </div>
 
               {/* Password Input */}
-              <div className="relative group" style={{margin:"2px 10px"}}>
+              <div className="relative group" style={{ margin: "2px 10px" }}>
                 <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors duration-300 ${focusedInput === 'password' ? 'text-indigo-400' : 'text-gray-500'}`}>
                   {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -162,15 +173,16 @@ export default function RegisterPage() {
             </p>
           </div>
         </div>
-        
+
         {/* Subtle footer */}
         <div className="mt-8 text-center text-xs text-gray-600">
           <p>By registering, you agree to our Terms of Service and Privacy Policy.</p>
         </div>
       </div>
-      
+
       {/* Add custom keyframes inline for simplicity */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes shimmer {
           100% { transform: translateX(100%); }
         }
