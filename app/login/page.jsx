@@ -1,29 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-export default function IsAuthenticated({ children }) {
-    const router = useRouter();
-    const [isAuth, setIsAuth] = useState(false);
-
-    useEffect(() => {
-        const token = localStorage.getItem("token");
-        if (!token) {
-            router.push("/login");
-        } else {
-            setIsAuth(true);
-        }
-    }, [router]);
-
-    if (!isAuth) return null;
-
-    return <>{children}</>;
-}
 
 
-function LoginPage() {
+
+export default function LoginPage() {
     const router = useRouter();
 
     const [loginMethod, setLoginMethod] = useState('password'); // 'password' or 'otp'
@@ -159,7 +143,6 @@ function LoginPage() {
     };
 
     return (
-        <IsAuthenticated>
             <div className="min-h-screen bg-[#030712] flex items-center justify-center p-4 relative overflow-hidden font-sans text-gray-100">
                 {/* Background Ambient Glows */}
                 <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/20 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '4s' }} />
@@ -197,9 +180,9 @@ function LoginPage() {
                                 </div>
                             )}
 
-                            <div className="space-y-4">
+                            <div className="space-y-5">
                                 {/* Email Input */}
-                                <div className="relative group" style={{ margin: "2px 10px" }}>
+                                <div className="relative group">
                                     <input
                                         type="email"
                                         name="email"
@@ -216,7 +199,7 @@ function LoginPage() {
 
                                 {/* Password Input */}
                                 {loginMethod === 'password' && (
-                                    <div className="relative group" style={{ margin: "2px 10px" }}>
+                                    <div className="relative group">
                                         <input
                                             type="password"
                                             name="password"
@@ -233,7 +216,7 @@ function LoginPage() {
 
                                 {/* OTP Input */}
                                 {loginMethod === 'otp' && otpSent && (
-                                    <div className="relative group" style={{ margin: "2px 10px" }}>
+                                    <div className="relative group">
                                         <input
                                             type="text"
                                             name="otp"
@@ -317,6 +300,5 @@ function LoginPage() {
         }
       `}} />
             </div>
-        </IsAuthenticated>
     );
 }
