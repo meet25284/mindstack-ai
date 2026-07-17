@@ -1,32 +1,35 @@
 import User from "@/models/users";
 import { verifyToken } from "@/services/jwt";
+import { NextResponse } from "next/server";
 
+export async function isAuthenticated(request) {
+    const authHeader = request.headers.get("authorization");
 
-export const getMe = async (token) => {
-    if (!token) return null;
-    const cleanToken = token.startsWith("Bearer ") ? token.slice(7) : token;
-    const id = verifyToken(cleanToken);
-    if (!id) return null;
-    const user = await User.findById(id);
-    return user;
-};
-
-
-
-
-
-export const isAuthenticated = async (req, res, next) => {
-    try {
-        const token = req.header("Authorization")
-        const user = await getMe(token)
-        if (user?._id) {
-            req.me = user;
-            next();
-        } else {
-            throw new Error("Not authenticated")
-        }
-    } catch (err) {
-        res.status(500).json({ message: err?.message });
+    if (!authHeader) {
+        throw new Error("Unauthorized");
     }
 
+    // Support both "Bearer <token>" and a raw token, just in case
+    const token = authHeader.startsWith("Bearer ")
+        ? authHeader.slice(7).trim()
+        : authHeader.trim();
+
+    if (!token) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    }
+
+    const id = await verifyToken(token);
+
+    if (!id) {
+        return NextResponse.json({ message: "Invalid Token" }, { status: 401 });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+        return NextResponse.json({ message: "User not found" }, { status: 404 });
+    }
+
+    return user;
 }
