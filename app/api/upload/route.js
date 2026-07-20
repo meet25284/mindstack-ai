@@ -3,8 +3,9 @@ import fs from "fs/promises";
 import path from "path";
 import File from "@/models/files";
 import { isAuthenticated } from "@/middleware/auth";
-import PdfParse from "pdf-parse";
-import mammoth from "mammoth";
+import { textconverter } from "@/services/textconverter";
+import { generateBatchEmbeddings } from "@/services/generateEmbedding";
+import { db } from "@/lib/mongodb";
 
 
 export async function POST(request) {
@@ -65,53 +66,23 @@ export async function POST(request) {
             await fs.writeFile(filePath, buffer);
 
             //save into db
-            await File.create({
+            const colFile = await File.create({
                 title: title,
                 path: filePath
             });
-            const chunkSize = 1000
-            const overlap = 100
 
-            switch (file.type) {
-                case "application/pdf":
-                    const pdftext = await PdfParse(buffer)
-                    const pdfchunks = [];
+            const chunks = await textconverter(file, buffer);
+            const embeddings = await generateBatchEmbeddings(chunks);
+            const docs = chunks.map((chunk, index) => ({
+                knowledgeId: colFile._id,
+                chunkIndex: index,
+                content: chunk,
+                vector: embeddings[index],
+            }));
 
-                    for (let i = 0; i < pdftext.text.length; i += chunkSize - overlap) {
-                        pdfchunks.push(pdftext.text.slice(i, i + chunkSize));
-                    }
-                    break;
+            await db.collection("vector").insertMany(docs);
 
-                case "text/plain":
-                    const text = await file.text()
-                    const textchunks = [];
 
-                    for (let i = 0; i < text.length; i += chunkSize - overlap) {
-                        textchunks.push(text.slice(i, i + chunkSize));
-                    }
-                    break;
-
-                case "text/markdown":
-                    const mdtotext = await file.text()
-                    const mdchunks = [];
-
-                    for (let i = 0; i < mdtotext.length; i += chunkSize - overlap) {
-                        mdchunks.push(mdtotext.slice(i, i + chunkSize));
-                    }
-                    break;
-
-                case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-                    const doctext = await mammoth.extractRawText({ buffer })
-                    const docchunks = [];
-                    
-                    for (let i = 0; i < doctext.value.length; i += chunkSize - overlap) {
-                        docchunks.push(doctext.value.slice(i, i + chunkSize));
-                    }
-                    break;
-
-                default:
-                    throw new Error("Unsupported file type");
-            }
             return NextResponse.json({
                 success: true,
                 fileName,

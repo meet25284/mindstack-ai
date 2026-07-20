@@ -9,9 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.15",
+    "@ai-sdk/openai": "^4.0.16",
     "@tailwindcss/postcss": "^4.3.2",
-    "ai": "^7.0.29",
+    "ai": "^7.0.31",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.24.0",
     "mammoth": "^1.12.0",
+    "mongodb": "^7.5.0",
     "mongoose": "^9.7.4",
     "multer": "^2.2.0",
     "next": "16.2.10",
