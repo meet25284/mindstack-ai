@@ -9,8 +9,6 @@ export const chat = async (promptData, { onChunk, onDone, onError }) => {
             },
             body: JSON.stringify(promptData),
         });
-        console.log("🚀 ~ chat ~ res:", res)
-
 
         if (!res.ok || !res.body) {
             throw new Error(`Request failed: ${res.status}`);

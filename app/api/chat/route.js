@@ -7,6 +7,8 @@ import { generateText, streamText } from "ai";
 import Conversation from "@/models/conversation";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/middleware/auth";
+import { generateBatchEmbeddings } from "@/services/generateEmbedding";
+import runVectorSearch from "@/services/vectorSearch";
 
 const model = openai("gpt-4o-mini");
 
@@ -36,7 +38,6 @@ const generateTitle = async (message) => {
 // ---------------- POST ----------------
 
 export async function POST(req) {
-    //   await connectDB();
 
     try {
         const user = await isAuthenticated(req)
@@ -90,6 +91,13 @@ export async function POST(req) {
                 content: prompt,
             });
 
+            const userPrompt = await generateBatchEmbeddings(prompt)
+
+            const vectorResult = await runVectorSearch(userPrompt)
+            console.log("🚀 ~ POST ~ vectorResult:",vectorResult)
+
+
+
             const result = streamText({
                 model,
                 system:
@@ -138,11 +146,14 @@ export async function POST(req) {
                             updatedAt: new Date(),
                         });
 
+                        const threadInfo = await Thread.findById(threadId);
+
                         controller.enqueue(
                             encoder.encode(
                                 `event: end\n` +
                                 `data: ${JSON.stringify({
                                     threadId,
+                                    title: threadInfo?.title || "New Chat",
                                 })}\n\n`
                             )
                         );
@@ -162,14 +173,14 @@ export async function POST(req) {
                     }
                 },
             });
-
             return new Response(stream, {
                 headers: {
                     "Content-Type": "text/event-stream",
                     "Cache-Control": "no-cache",
                     "Connection": "keep-alive",
                 },
-            });
+            }
+            )
         }
         else {
             return NextResponse.json({

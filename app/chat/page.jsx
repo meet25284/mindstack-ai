@@ -212,7 +212,7 @@ export default function ChatPage() {
       messages: [...activeConversation.messages, userMsg, assistantMsg],
     };
     upsertConversation(optimisticConv);
-
+    console.log("🚀 ~ sendMessage ~ optimisticConv.title:", optimisticConv.title)
     const appendToAssistant = (chunk) => {
       setConversations((prev) =>
         prev.map((c) => {
@@ -231,12 +231,16 @@ export default function ChatPage() {
       { prompt: text, threadId: activeConversation.id },
       {
         onChunk: (chunk) => appendToAssistant(chunk),
-        onDone: ({ threadId: newThreadId }) => {
+        onDone: ({ threadId: newThreadId, title }) => {
           if (newThreadId && newThreadId !== activeConversation.id) {
             setConversations((prev) =>
-              prev.map((c) => (c.id === optimisticConv.id ? { ...c, id: newThreadId } : c))
+              prev.map((c) => (c.id === optimisticConv.id ? { ...c, id: newThreadId, title: title || c.title } : c))
             );
             setActiveConversationId(newThreadId);
+          } else if (title) {
+            setConversations((prev) =>
+              prev.map((c) => (c.id === optimisticConv.id ? { ...c, title } : c))
+            );
           }
           setIsSending(false);
         },

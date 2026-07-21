@@ -2,7 +2,7 @@ import mammoth from "mammoth";
 import PdfParse from "pdf-parse";
 
 export const textconverter = async (file, buffer) => {
-    const chunkSize = 1000
+    const chunkSize = 500
     const overlap = 100
     switch (file.type) {
         case "application/pdf":
