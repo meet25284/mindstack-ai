@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/middleware/auth";
 import { generateBatchEmbeddings } from "@/services/generateEmbedding";
 import runVectorSearch from "@/services/vectorSearch";
+import buildSystemPrompt from "@/services/promptBuilder";
 
 const model = openai("gpt-4o-mini");
 
@@ -84,24 +85,22 @@ export async function POST(req) {
                     content: msg.message,
                 }));
 
-            // Add current prompt
+            // Add current prompt    
 
             formattedHistory.push({
                 role: "user",
                 content: prompt,
             });
 
-            const userPrompt = await generateBatchEmbeddings(prompt)
+            // Generate embedding for user's question
+            const userEmbedding = await generateBatchEmbeddings(prompt);
 
-            const vectorResult = await runVectorSearch(userPrompt)
-            console.log("🚀 ~ POST ~ vectorResult:",vectorResult)
-
-
-
+            // Search similar chunks from MongoDB Vector Search
+            const vectorResult = await runVectorSearch(userEmbedding);
+            
             const result = streamText({
                 model,
-                system:
-                    "You are a helpful library assistant for a library management system. Answer user queries helpfully and concisely.",
+                system:buildSystemPrompt(vectorResult),
                 messages: formattedHistory,
             });
 

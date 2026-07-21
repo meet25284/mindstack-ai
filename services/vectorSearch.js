@@ -13,7 +13,7 @@ export default async function runVectorSearch(userQuery) {
                     path: "vector",       // The document field holding the vectors
                     queryVector: userQuery[0],     // The vector representation of your search term
                     numCandidates: 100,           // Number of cluster neighbors to inspect (higher = more accurate)
-                    limit: 2                      // Total number of documents to return
+                    limit: 3                      // Total number of documents to return
                 }
             },
             {
@@ -29,7 +29,7 @@ export default async function runVectorSearch(userQuery) {
 
         const results = await collection.aggregate(pipeline).toArray();
 
-        return JSON.stringify(results, null, 2);
+        return results
     } catch (error) {
         return `Error executing vector search: ${error.message}`
     }
