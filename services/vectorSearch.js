@@ -13,7 +13,7 @@ export default async function runVectorSearch(userQuery) {
                     path: "vector",       // The document field holding the vectors
                     queryVector: userQuery[0],     // The vector representation of your search term
                     numCandidates: 100,           // Number of cluster neighbors to inspect (higher = more accurate)
-                    limit: 3                      // Total number of documents to return
+                    limit: 7                      // Total number of documents to return
                 }
             },
             {
