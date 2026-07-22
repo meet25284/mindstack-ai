@@ -7,12 +7,12 @@ import { UploadCloud, FileText, Loader2, CheckCircle, AlertCircle } from 'lucide
 export default function UploadPage() {
     const router = useRouter();
     const fileInputRef = useRef(null);
-    
+
     const [formData, setFormData] = useState({
         title: "",
         document: null,
     });
-    
+
     const [isDragging, setIsDragging] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [status, setStatus] = useState({ type: '', message: '' });
@@ -51,7 +51,7 @@ export default function UploadPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!formData.title || !formData.document) {
             setStatus({ type: 'error', message: 'Please provide both a title and a document.' });
             return;
@@ -73,7 +73,7 @@ export default function UploadPage() {
                 body: data,
             });
 
-            if(response.status === 401){
+            if (response.status === 401) {
                 router.push("/login");
                 return;
             }
@@ -127,14 +127,13 @@ export default function UploadPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Document File
                             </label>
-                            <div 
-                                className={`mt-1 flex justify-center px-6 py-10 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                                    isDragging 
-                                        ? 'border-blue-500 bg-blue-50' 
-                                        : formData.document 
-                                            ? 'border-green-300 bg-green-50' 
+                            <div
+                                className={`mt-1 flex justify-center px-6 py-10 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${isDragging
+                                        ? 'border-blue-500 bg-blue-50'
+                                        : formData.document
+                                            ? 'border-green-300 bg-green-50'
                                             : 'border-gray-300 hover:border-gray-400 bg-gray-50'
-                                }`}
+                                    }`}
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={handleDrop}
@@ -182,9 +181,8 @@ export default function UploadPage() {
 
                         {/* Status Messages */}
                         {status.message && (
-                            <div className={`p-3 rounded-lg flex items-center gap-2 text-sm ${
-                                status.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                            }`}>
+                            <div className={`p-3 rounded-lg flex items-center gap-2 text-sm ${status.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                }`}>
                                 {status.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
                                 <span>{status.message}</span>
                             </div>

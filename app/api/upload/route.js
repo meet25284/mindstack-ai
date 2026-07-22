@@ -78,6 +78,7 @@ export async function POST(request) {
                 chunkIndex: index,
                 content: chunk,
                 vector: embeddings[index],
+                createdAt: Date.now(),
             }));
 
             await db.collection("vector").insertMany(docs);

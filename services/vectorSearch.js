@@ -24,7 +24,12 @@ export default async function runVectorSearch(userQuery) {
                     content: 1,
                     score: { $meta: "vectorSearchScore" }
                 }
-            }
+            },
+            {
+                $match: {
+                    score: { $gte: 0.70 },
+                },
+            },
         ];
 
         const results = await collection.aggregate(pipeline).toArray();
