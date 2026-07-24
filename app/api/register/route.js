@@ -39,8 +39,8 @@ export async function POST(req) {
             password: hashedPassword,
         });
 
-        await welcomeEmail(body.email);
-        await verifyEmail(body.email)
+        await welcomeEmail(body.email, body.name);
+        await verifyEmail(body.email);
         return NextResponse.json({
             success: true,
             message: "User created successfully",

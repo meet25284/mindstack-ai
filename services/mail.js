@@ -2,6 +2,9 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 dotenv.config();
 import jwt from "jsonwebtoken";
+import { getVerificationEmailTemplate } from "@/templetes/verification_email_templete";
+import { getWelcomeEmailTemplate } from "@/templetes/welcome_email_templete";
+import { getOTPEmailTemplate } from "@/templetes/otp_email_templete";
 
 export const transporter = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
@@ -28,9 +31,13 @@ export const sendEmail = async (
     });
 };
 
-export const welcomeEmail = (email) => {
-    return sendEmail(email, "welcome to library")
-}
+export const welcomeEmail = (email, name) => {
+    return sendEmail(
+        email,
+        "Welcome to MindStack AI",
+        getWelcomeEmailTemplate(name)
+    );
+};
 const otpStore = new Map();
 
 export const sendOTP = async (email) => {
@@ -43,8 +50,8 @@ export const sendOTP = async (email) => {
 
     await sendEmail(
         email,
-        "Email Verification",
-        `<h2>Your OTP is ${otp}</h2>`
+        "Email Verification Code",
+        getOTPEmailTemplate(otp)
     );
 
     return true;
@@ -57,12 +64,15 @@ export const verifyOTP = (email, otp) => {
 };
 
 export const verifyEmail = async (email) => {
-    const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    const verificationToken = jwt.sign({email}, process.env.JWT_SECRET || "secret", { expiresIn: "24h" });
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const verificationLink = `${baseUrl}/api/verify-email/${verificationToken}`;
     
     await sendEmail(
         email,
         "Verify Your Email",
-        `<button style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;"><a href="http://localhost:3000/api/verify-email/${verificationToken}" style="text-decoration: none; color: white;">Verify Email</a></button>`
+        getVerificationEmailTemplate(verificationLink)
     );
-}
+};
+
     
