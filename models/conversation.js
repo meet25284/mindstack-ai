@@ -22,6 +22,13 @@ const conversation = new mongoose.Schema({
     message:{
         type:String
     },
+    sources: [
+        {
+            knowledgeId: String,
+            content: String,
+            score: Number,
+        }
+    ],
     createdAt: {
         type: Date,
         default: Date.now,

@@ -1,13 +1,36 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MessageSquare, X, Send, History, Trash2, Plus, Loader2, Menu, Upload, Settings } from "lucide-react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  MessageSquare,
+  X,
+  Send,
+  History,
+  Trash2,
+  Plus,
+  Loader2,
+  Menu,
+  Upload,
+  Database,
+  ShieldCheck,
+  BookOpen,
+  Copy,
+  Check,
+  FolderOpen,
+  Sparkles,
+} from "lucide-react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { chat } from "@/services/chat";
-import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
+import KBScopeIndicator from "@/components/KBScopeIndicator";
+import SourceCitationPanel from "@/components/SourceCitationPanel";
+import GroundedEmptyState from "@/components/GroundedEmptyState";
+import FileViewerModal from "@/components/FileViewerModal";
 
-/* ─── Auth guard ─────────────────────────────────────────────────── */
+/* ─── Auth Guard ─────────────────────────────────────────────────── */
 function IsAuthenticated({ children }) {
   const router = useRouter();
   const [isAuth, setIsAuth] = useState(false);
@@ -25,7 +48,7 @@ function IsAuthenticated({ children }) {
   return <>{children}</>;
 }
 
-/* ─── Helpers ─────────────────────────────────────────────────────── */
+/* ─── Helper Functions ────────────────────────────────────────────── */
 function makeId() {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -34,16 +57,13 @@ function newConversation() {
   const now = Date.now();
   return {
     id: "new",
-    title: "New chat",
+    title: "New Chat",
     createdAt: now,
     updatedAt: now,
-    messages: [
-      { id: makeId(), role: "assistant", content: "Hi! How can I help you today?", ts: now },
-    ],
+    messages: [],
   };
 }
 
-/* ─── Page ────────────────────────────────────────────────────────── */
 export default function ChatPage() {
   const router = useRouter();
   const [conversations, setConversations] = useState([]);
@@ -52,6 +72,10 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
+
+  // Inspector modal state
+  const [inspectDoc, setInspectDoc] = useState(null);
 
   const activeConversation = useMemo(() => {
     const fromId = conversations.find((c) => c.id === activeConversationId);
@@ -66,7 +90,7 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeConversation?.messages]);
 
-  /* Auto-focus textarea */
+  /* Auto-focus input */
   useEffect(() => {
     if (!isSending) inputRef.current?.focus();
   }, [isSending, activeConversationId]);
@@ -74,10 +98,9 @@ export default function ChatPage() {
   /* Load threads on mount */
   useEffect(() => {
     loadThreads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ── API helpers ── */
+  /* Load threads from backend API */
   const loadThreads = async () => {
     try {
       setIsLoading(true);
@@ -114,6 +137,7 @@ export default function ChatPage() {
     }
   };
 
+  /* Load thread messages */
   const loadMessages = async (threadId) => {
     if (threadId === "new") return;
     try {
@@ -128,13 +152,14 @@ export default function ChatPage() {
         id: m._id,
         role: m.sender === "ai" ? "assistant" : "user",
         content: m.message,
+        sources: m.sources || [],
         ts: new Date(m.createdAt).getTime(),
       }));
       setConversations((prev) =>
         prev.map((c) => (c.id === threadId ? { ...c, messages: formatted } : c))
       );
     } catch (err) {
-      console.error("Error loading messages:", err);
+      console.error("Error loading thread messages:", err);
     }
   };
 
@@ -143,10 +168,9 @@ export default function ChatPage() {
       const conv = conversations.find((c) => c.id === activeConversationId);
       if (conv && conv.messages.length === 0) loadMessages(activeConversationId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId]);
 
-  /* ── Conversation actions ── */
+  /* State Management Helpers */
   const upsertConversation = (conv) => {
     setConversations((prev) => {
       const idx = prev.findIndex((c) => c.id === conv.id);
@@ -168,15 +192,13 @@ export default function ChatPage() {
   const deleteConversation = async (id) => {
     if (id !== "new") {
       try {
-        const res = await fetch(`/api/deleteConversation/${id}`, {
+        await fetch(`/api/deleteConversation/${id}`, {
           method: "DELETE",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
         });
-        const data = await res.json();
-        console.log(data);
       } catch (err) {
         console.error("Failed to delete thread", err);
       }
@@ -191,37 +213,34 @@ export default function ChatPage() {
     }
   };
 
-  /* ── Send message ── */
-  const sendMessage = async () => {
-    if (!activeConversation || isSending) return;
-    const text = draft.trim();
-    if (!text) return;
+  /* Send Message Workflow */
+  const sendMessage = async (customPrompt) => {
+    const text = (customPrompt || draft).trim();
+    if (!text || isSending || !activeConversation) return;
 
     setIsSending(true);
-    setDraft("");
+    if (!customPrompt) setDraft("");
 
     const now = Date.now();
     const userMsg = { id: makeId(), role: "user", content: text, ts: now };
     const assistantMsgId = makeId();
-    const assistantMsg = { id: assistantMsgId, role: "assistant", content: "", ts: now };
+    const assistantMsg = { id: assistantMsgId, role: "assistant", content: "", sources: [], ts: now };
 
     const optimisticConv = {
       ...activeConversation,
-      title: activeConversation.title === "New chat" ? text : activeConversation.title,
+      title: activeConversation.title === "New Chat" ? text : activeConversation.title,
       updatedAt: now,
       messages: [...activeConversation.messages, userMsg, assistantMsg],
     };
     upsertConversation(optimisticConv);
-    console.log("🚀 ~ sendMessage ~ optimisticConv.title:", optimisticConv.title)
-    const appendToAssistant = (chunk) => {
+
+    const updateAssistantMsg = (fn) => {
       setConversations((prev) =>
         prev.map((c) => {
           if (c.id !== optimisticConv.id) return c;
           return {
             ...c,
-            messages: c.messages.map((m) =>
-              m.id === assistantMsgId ? { ...m, content: m.content + chunk } : m
-            ),
+            messages: c.messages.map((m) => (m.id === assistantMsgId ? fn(m) : m)),
           };
         })
       );
@@ -230,22 +249,36 @@ export default function ChatPage() {
     await chat(
       { prompt: text, threadId: activeConversation.id },
       {
-        onChunk: (chunk) => appendToAssistant(chunk),
-        onDone: ({ threadId: newThreadId, title }) => {
-          if (newThreadId && newThreadId !== activeConversation.id) {
-            setConversations((prev) =>
-              prev.map((c) => (c.id === optimisticConv.id ? { ...c, id: newThreadId, title: title || c.title } : c))
-            );
-            setActiveConversationId(newThreadId);
-          } else if (title) {
-            setConversations((prev) =>
-              prev.map((c) => (c.id === optimisticConv.id ? { ...c, title } : c))
-            );
-          }
+        onSources: (retrievedSources) => {
+          updateAssistantMsg((m) => ({ ...m, sources: retrievedSources }));
+        },
+        onChunk: (chunk) => {
+          updateAssistantMsg((m) => ({ ...m, content: m.content + chunk }));
+        },
+        onDone: ({ threadId: newThreadId, title, sources: finalSources }) => {
+          setConversations((prev) =>
+            prev.map((c) => {
+              if (c.id !== optimisticConv.id) return c;
+              return {
+                ...c,
+                id: newThreadId || c.id,
+                title: title || c.title,
+                messages: c.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, sources: finalSources || m.sources }
+                    : m
+                ),
+              };
+            })
+          );
+          if (newThreadId) setActiveConversationId(newThreadId);
           setIsSending(false);
         },
         onError: (err) => {
-          appendToAssistant(`\n[Error: ${err.message || "stream failed"}]`);
+          updateAssistantMsg((m) => ({
+            ...m,
+            content: `\n⚠️ Grounding Error: ${err.message || "Failed to retrieve context from knowledge base."}`,
+          }));
           setIsSending(false);
         },
       }
@@ -259,284 +292,317 @@ export default function ChatPage() {
     }
   };
 
-  // TODO: Add API integration for file uploads
-  const handleFileUpload = () => {
-    router.push("/upload");
+  const handleCopyText = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // TODO: Add API integration for fetching user info/settings
-  const openSettings = () => {
-    console.log("Settings clicked - Implement settings modal here");
+  const handleInspectSourceId = (id) => {
+    if (!id) return;
+    setInspectDoc({ id, fileType: "pdf", title: `Source Document #${id.slice(-6)}` });
   };
 
-  const isNewChat =
-    activeConversation?.messages.length === 1 &&
-    activeConversation.messages[0].content === "Hi! How can I help you today?" &&
-    activeConversation.title === "New chat";
+  const isNewChat = !activeConversation || activeConversation.messages.length === 0;
 
-  /* ─── Render ─────────────────────────────────────────────────────── */
   return (
     <IsAuthenticated>
-      {/*
-        ROOT: fills the full viewport, no overflow, nothing scrolls here.
-        flex row → sidebar | main-column
-      */}
-      <div className="flex h-screen w-screen overflow-hidden bg-[#030712] text-gray-100 font-sans">
-
-        {/* Ambient background glows — purely decorative, pointer-events disabled */}
-        <div className="pointer-events-none fixed inset-0 z-0">
-          <div className="absolute -top-[20%] -left-[10%] h-[50%] w-[50%] rounded-full bg-indigo-600/10 blur-[120px]" />
-          <div className="absolute -bottom-[20%] -right-[10%] h-[50%] w-[50%] rounded-full bg-purple-600/10 blur-[120px]" />
-        </div>
-
-        {/* ── Mobile overlay backdrop ── */}
+      <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
+        {/* Mobile Backdrop */}
         {isSidebarOpen && (
           <div
-            className="fixed inset-0 z-20 bg-black/60 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-20 bg-slate-950/60 backdrop-blur-sm md:hidden"
             onClick={() => setIsSidebarOpen(false)}
           />
         )}
 
-        {/* ════════════════════════════════
-            SIDEBAR
-            - mobile: fixed, slides in/out
-            - desktop: part of flex row, slides in/out but stays in flow via w-0/w-72
-        ════════════════════════════════ */}
+        {/* ── SIDEBAR NAVIGATION ── */}
         <aside
-          className={`
-            fixed top-0 left-0 z-30 h-full flex flex-col
-            bg-gray-900/60 backdrop-blur-xl border-r border-gray-800/60 shadow-2xl
-            transition-all duration-300 ease-in-out
-            ${isSidebarOpen ? "w-72" : "w-0"}
-            md:relative md:z-10 md:shadow-none
-          `}
+          className={`fixed top-0 left-0 z-30 h-full flex flex-col bg-slate-100/90 dark:bg-[#0b1120]/90 backdrop-blur-xl border-r border-slate-200 dark:border-slate-800/80 shadow-2xl md:shadow-none transition-all duration-300 ease-in-out ${
+            isSidebarOpen ? "w-72" : "w-0"
+          } md:relative md:z-10`}
           style={{ overflow: "hidden" }}
         >
-          {/* Inner wrapper keeps content at fixed 288px so it doesn't squish while animating */}
           <div className="flex flex-col h-full w-72">
+            {/* Sidebar Brand & New Chat */}
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-2">
+              <Link href="/chat" className="flex items-center gap-2 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white flex items-center justify-center font-black shadow-md shadow-indigo-600/20 shrink-0">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white block truncate">
+                    MindStack AI
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                    Knowledge Base Assistant
+                  </span>
+                </div>
+              </Link>
 
-            {/* Header row: New Chat + Close */}
-            <div className="flex items-center gap-2 p-4 border-b border-gray-800/50">
-              <button
-                onClick={createNewChat}
-                className="group flex items-center gap-2 flex-1 min-w-0 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-all shadow-lg shadow-indigo-500/20"
-              >
-                <Plus size={16} className="shrink-0 group-hover:rotate-90 transition-transform duration-300" />
-                <span>New Chat</span>
-              </button>
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl transition-colors shrink-0"
-                title="Close sidebar"
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors md:hidden"
+                aria-label="Close sidebar"
               >
-                <X size={18} />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Conversation list */}
-            <div className="flex-1 overflow-y-auto py-3 px-3 space-y-1">
-              <p className="flex items-center gap-1.5 px-2 mb-3 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                <History size={11} />
-                Recent Chats
+            {/* New Chat Action Button */}
+            <div className="p-3">
+              <button
+                onClick={createNewChat}
+                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-md shadow-indigo-600/20 transition-all hover:scale-[1.02]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Conversation</span>
+              </button>
+            </div>
+
+            {/* Conversation History List */}
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+              <p className="flex items-center gap-1.5 px-2 mb-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                <History className="w-3 h-3" />
+                <span>Recent Conversations</span>
               </p>
 
-              {conversations.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => {
-                    setActiveConversationId(c.id);
-                    if (window.innerWidth < 768) setIsSidebarOpen(false);
-                  }}
-                  className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 overflow-hidden ${
-                    c.id === activeConversationId
-                      ? "bg-gray-800/70 text-white border border-gray-700/50"
-                      : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 border border-transparent"
-                  }`}
-                >
-                  {/* Active indicator bar */}
-                  {c.id === activeConversationId && (
-                    <div className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full bg-gradient-to-b from-indigo-500 to-purple-500" />
-                  )}
-
-                  <MessageSquare
-                    size={14}
-                    className={`shrink-0 ${c.id === activeConversationId ? "text-indigo-400" : "text-gray-500 group-hover:text-gray-400"}`}
-                  />
-                  <span className="flex-1 truncate text-sm font-medium">{c.title || "New Chat"}</span>
-
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
-                    className="shrink-0 p-1 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-400/10 opacity-0 group-hover:opacity-100 transition-all"
-                    title="Delete chat"
+              {conversations.map((c) => {
+                const isActive = c.id === activeConversationId;
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      setActiveConversationId(c.id);
+                      if (window.innerWidth < 768) setIsSidebarOpen(false);
+                    }}
+                    className={`group relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150 overflow-hidden text-xs font-semibold ${
+                      isActive
+                        ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-800 shadow-sm"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
                   >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
+                    {isActive && (
+                      <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-400" />
+                    )}
+                    <MessageSquare className={`w-4 h-4 shrink-0 ${isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"}`} />
+                    <span className="flex-1 truncate">{c.title || "New Chat"}</span>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteConversation(c.id);
+                      }}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                      title="Delete thread"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Sidebar footer — Upload KB + Settings */}
-            <div className="p-3 border-t border-gray-800/50 space-y-1">
-              <button
-                onClick={handleFileUpload}
-                className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800/50 rounded-xl transition-all"
+            {/* Sidebar Navigation Footer */}
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800/80 space-y-1.5 bg-slate-100/50 dark:bg-[#090d16]/50">
+              <Link
+                href="/knowledge"
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-xl transition-all"
               >
-                <Upload size={16} className="text-gray-500" />
-                <span>Upload Knowledge Base</span>
-              </button>
-              <button
-                onClick={openSettings}
-                className="flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800/50 rounded-xl transition-all"
+                <FolderOpen className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span>Knowledge Base</span>
+              </Link>
+              <Link
+                href="/upload"
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-xl transition-all"
               >
-                <Settings size={16} className="text-gray-500" />
-                <span>Settings</span>
-              </button>
+                <Upload className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>Upload Documents</span>
+              </Link>
+              <div className="pt-2 flex items-center justify-between px-2">
+                <span className="text-[11px] text-slate-400 font-medium">Appearance</span>
+                <ThemeToggle />
+              </div>
             </div>
           </div>
         </aside>
 
-        {/* ════════════════════════════════
-            MAIN COLUMN
-            flex-col: header | scrollable messages | static input
-        ════════════════════════════════ */}
+        {/* ── MAIN CHAT COLUMN ── */}
         <div className="relative flex flex-1 flex-col min-w-0 h-full z-10">
+          {/* Top Header Bar */}
+          <header className="flex shrink-0 items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-200 dark:border-slate-800/80 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={() => setIsSidebarOpen((v) => !v)}
+                className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0"
+                title="Toggle sidebar"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
 
-          {/* Top header bar — always visible, never scrolls */}
-          <header className="flex shrink-0 items-center gap-3 px-4 py-3 border-b border-gray-800/50 bg-gray-900/30 backdrop-blur-md">
-            <button
-              onClick={() => setIsSidebarOpen((v) => !v)}
-              className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl transition-colors shrink-0"
-              title="Toggle sidebar"
-            >
-              <Menu size={20} />
-            </button>
-            <h1 className="flex-1 truncate text-sm font-semibold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-              {activeConversation?.title || "MindStack AI"}
-            </h1>
-            <button
-              onClick={createNewChat}
-              className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl transition-colors shrink-0"
-              title="New chat"
-            >
-              <Plus size={20} />
-            </button>
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+                  {activeConversation?.title || "MindStack AI Grounded Chat"}
+                </h1>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate hidden xs:block">
+                  Verified answers synthesized exclusively from uploaded knowledge
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <KBScopeIndicator activeScope="Global Knowledge" />
+            </div>
           </header>
 
-          {/* Messages — ONLY this area scrolls */}
-          <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col items-center scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
-            <div className="w-full max-w-3xl space-y-5">
-
+          {/* Messages Feed */}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 flex flex-col items-center">
+            <div className="w-full max-w-3xl space-y-6">
               {isLoading ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-20 text-gray-500">
-                  <div className="w-9 h-9 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
-                  <span className="text-sm animate-pulse">Syncing Knowledge...</span>
+                <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                  <span className="text-sm font-medium">Syncing Knowledge Base...</span>
                 </div>
-
               ) : isNewChat ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in-up" style={{marginTop:"200px"}}>
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center mb-5 shadow-xl shadow-indigo-500/20">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <h2 className="text-2xl font-bold bg-gradient-to-r from-gray-100 to-gray-400 bg-clip-text text-transparent mb-2">
-                    Welcome to MindStack AI
-                  </h2>
-                  <p className="text-gray-500 max-w-sm text-sm leading-relaxed">
-                    Ask questions, analyze your knowledge base, or explore ideas.
-                  </p>
-                </div>
-
+                <GroundedEmptyState
+                  type="onboarding"
+                  onSampleClick={(q) => sendMessage(q)}
+                />
               ) : (
-                activeConversation?.messages.map((m) => {
+                activeConversation?.messages.map((m, index) => {
                   const isUser = m.role === "user";
+                  const isNoAnswer =
+                    !isUser &&
+                    (m.content?.includes("couldn't find this information") ||
+                      m.content?.includes("Out of Knowledge Base Scope"));
+
                   return (
                     <div
-                      key={m.id}
-                      className={`flex items-start gap-3 animate-fade-in-up ${isUser ? "flex-row-reverse" : "flex-row"}`}
+                      key={m.id || index}
+                      className={`flex items-start gap-3 animate-fade-in-up ${
+                        isUser ? "flex-row-reverse" : "flex-row"
+                      }`}
                     >
+                      {/* Avatar */}
                       {!isUser && (
-                        <div className="w-8 h-8 shrink-0 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-md shadow-indigo-500/20 mt-0.5">
-                          <span className="text-white text-[10px] font-bold tracking-wider">AI</span>
+                        <div className="w-9 h-9 shrink-0 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20 mt-1">
+                          <ShieldCheck className="w-5 h-5" />
                         </div>
                       )}
-                      <div
-                        className={`px-4 py-3 rounded-2xl max-w-[80%] text-[15px] leading-relaxed ${
-                          isUser
-                            ? "bg-gray-800 text-gray-100 rounded-tr-sm border border-gray-700/50"
-                            : "bg-gray-900/60 text-gray-300 border border-gray-800 rounded-tl-sm"
-                        }`}
-                      >
-                        <Streamdown
-                          animated={{ animation: "fadeIn", duration: 300, easing: "ease-out", sep: "word" }}
-                          isAnimating={true}
+
+                      {/* Message Content Container */}
+                      <div className={`space-y-2 max-w-[85%] ${isUser ? "items-end" : "items-start"}`}>
+                        {/* Prompt Bubble / Answer Document Card */}
+                        <div
+                          className={`p-4 sm:p-5 rounded-3xl text-sm leading-relaxed transition-all shadow-sm ${
+                            isUser
+                              ? "bg-indigo-600 text-white font-medium rounded-tr-sm shadow-indigo-600/20"
+                              : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-tl-sm"
+                          }`}
                         >
-                          {m.content}
-                        </Streamdown>
+                          {/* AI Grounded Header */}
+                          {!isUser && (
+                            <div className="flex items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-100 dark:border-slate-800 text-xs">
+                              <div className="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+                                <ShieldCheck className="w-4 h-4" />
+                                <span>Verified Knowledge Response</span>
+                              </div>
+
+                              <button
+                                onClick={() => handleCopyText(m.content, m.id)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                                title="Copy response text"
+                              >
+                                {copiedId === m.id ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Fallback check */}
+                          {isNoAnswer ? (
+                            <GroundedEmptyState type="no_answer" />
+                          ) : (
+                            <Streamdown
+                              animated={{ animation: "fadeIn", duration: 250, easing: "ease-out" }}
+                              isAnimating={true}
+                            >
+                              {m.content || "Searching knowledge vector index..."}
+                            </Streamdown>
+                          )}
+                        </div>
+
+                        {/* Grounded Citation Drawer */}
+                        {!isUser && m.sources && m.sources.length > 0 && (
+                          <SourceCitationPanel
+                            sources={m.sources}
+                            onInspectSource={(id) => handleInspectSourceId(id)}
+                          />
+                        )}
                       </div>
                     </div>
                   );
                 })
               )}
-
               <div ref={messagesEndRef} />
             </div>
           </div>
 
-          {/* Input bar — static, never scrolls, always at bottom */}
-          <div className="shrink-0 px-4 md:px-8 py-4 border-t border-gray-800/40 bg-gray-950/60 backdrop-blur-md" style={{display:"flex",justifyContent:"center"}}>
-            <div className="max-w-3xl mx-auto">
-              {/* Glow ring on focus */}
+          {/* Static Bottom Query Input Bar */}
+          <div className="shrink-0 px-4 sm:px-8 py-4 border-t border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#090d16]/90 backdrop-blur-md">
+            <div className="max-w-3xl mx-auto space-y-2">
               <div className="relative group">
-                <div className="absolute -inset-px rounded-2xl bg-gradient-to-r from-indigo-500/40 to-purple-500/40 blur-sm opacity-0 group-focus-within:opacity-100 transition duration-500 pointer-events-none" />
+                <div className="absolute -inset-px rounded-3xl bg-gradient-to-r from-indigo-500 to-purple-500 blur-sm opacity-0 group-focus-within:opacity-100 transition duration-300 pointer-events-none" />
 
-                {/* Single inline row: textarea + send button */}
-                <div className="relative flex items-center gap-2 bg-gray-900/80 border border-gray-800 rounded-2xl px-4 py-2 shadow-xl" style={{width:"100vh"}}>
+                <div className="relative flex items-end gap-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-3xl p-3 shadow-xl">
                   <textarea
                     ref={inputRef}
-                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none text-gray-200 text-[15px] placeholder-gray-500 leading-relaxed outline-none scrollbar-thin scrollbar-thumb-gray-700"
-                    placeholder="Ask MindStack AI anything…"
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={onKeyDown}
                     rows={1}
                     disabled={isSending || isLoading}
-                    style={{ minHeight: "40px", maxHeight: "160px" }}
-                    autoFocus
+                    placeholder="Ask a question strictly answered from your knowledge base..."
+                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none text-slate-900 dark:text-slate-100 text-sm placeholder-slate-400 outline-none leading-relaxed min-h-[44px] max-h-[140px]"
                   />
 
                   <button
-                    onClick={sendMessage}
+                    onClick={() => sendMessage()}
                     disabled={isSending || isLoading || !draft.trim()}
-                    className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 ${
-                      draft.trim() && !isSending
-                        ? "bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/30"
-                        : "bg-gray-800/60 text-gray-500 cursor-not-allowed"
-                    }`}
-                    title="Send"
+                    className="p-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 shadow-md shadow-indigo-600/20 transition-all shrink-0"
+                    title="Send query"
                   >
-                    {isSending ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+                    {isSending ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
               </div>
 
-              <p className="text-center text-xs text-gray-600 mt-2">
-                MindStack AI can make mistakes. Consider verifying important information.
-              </p>
+              <div className="flex items-center justify-between text-[11px] text-slate-400 px-2">
+                <span>Press Enter to send query</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                  ✓ Strict Vector Grounding Enabled
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-          }
-          .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
-        `,
-      }} />
+      {/* Source Document Inspector Modal */}
+      {inspectDoc && (
+        <FileViewerModal
+          isOpen={Boolean(inspectDoc)}
+          onClose={() => setInspectDoc(null)}
+          doc={inspectDoc}
+        />
+      )}
     </IsAuthenticated>
   );
 }

@@ -1,4 +1,4 @@
-export const chat = async (promptData, { onChunk, onDone, onError }) => {
+export const chat = async (promptData, { onChunk, onSources, onDone, onError }) => {
     try {
         const token = localStorage.getItem("token");
         const res = await fetch("/api/chat", {
@@ -33,7 +33,6 @@ export const chat = async (promptData, { onChunk, onDone, onError }) => {
                 const lines = rawEvent.split("\n");
                 let eventType = "message";
                 let dataLine = "";
-                // const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
                 for (const line of lines) {
                     if (line.startsWith("event:")) {
@@ -41,7 +40,6 @@ export const chat = async (promptData, { onChunk, onDone, onError }) => {
                     } else if (line.startsWith("data:")) {
                         dataLine = line.replace("data:", "").trim();
                     }
-                    // await delay(50)
                 }
 
                 if (!dataLine) continue;
@@ -53,10 +51,14 @@ export const chat = async (promptData, { onChunk, onDone, onError }) => {
                     continue;
                 }
 
+                if (parsed.sources) {
+                    onSources?.(parsed.sources);
+                }
+
                 if (eventType === "end") {
                     onDone?.(parsed);
-                } else {
-                    onChunk?.(parsed.text ?? "");
+                } else if (parsed.text !== undefined) {
+                    onChunk?.(parsed.text);
                 }
             }
         }

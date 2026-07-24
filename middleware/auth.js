@@ -3,7 +3,17 @@ import { verifyToken } from "@/services/jwt";
 import { NextResponse } from "next/server";
 
 export async function isAuthenticated(request) {
-    const authHeader = request.headers.get("authorization");
+    let authHeader = request.headers.get("authorization");
+
+    if (!authHeader && request.url) {
+        try {
+            const url = new URL(request.url);
+            const queryToken = url.searchParams.get("token");
+            if (queryToken) {
+                authHeader = `Bearer ${queryToken}`;
+            }
+        } catch (e) {}
+    }
 
     if (!authHeader) {
         throw new Error("Unauthorized");

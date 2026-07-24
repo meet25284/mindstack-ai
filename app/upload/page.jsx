@@ -129,10 +129,10 @@ export default function UploadPage() {
                             </label>
                             <div
                                 className={`mt-1 flex justify-center px-6 py-10 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${isDragging
-                                        ? 'border-blue-500 bg-blue-50'
-                                        : formData.document
-                                            ? 'border-green-300 bg-green-50'
-                                            : 'border-gray-300 hover:border-gray-400 bg-gray-50'
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : formData.document
+                                        ? 'border-green-300 bg-green-50'
+                                        : 'border-gray-300 hover:border-gray-400 bg-gray-50'
                                     }`}
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
