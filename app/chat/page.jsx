@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -24,7 +24,6 @@ import {
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
 import { chat } from "@/services/chat";
-import ThemeToggle from "@/components/ThemeToggle";
 import KBScopeIndicator from "@/components/KBScopeIndicator";
 import SourceCitationPanel from "@/components/SourceCitationPanel";
 import GroundedEmptyState from "@/components/GroundedEmptyState";
@@ -40,7 +39,7 @@ function IsAuthenticated({ children }) {
     if (!token) {
       router.push("/login");
     } else {
-      setIsAuth(true);
+      queueMicrotask(() => setIsAuth(true));
     }
   }, [router]);
 
@@ -71,7 +70,7 @@ export default function ChatPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [draft, setDraft] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
 
   // Inspector modal state
@@ -95,15 +94,35 @@ export default function ChatPage() {
     if (!isSending) inputRef.current?.focus();
   }, [isSending, activeConversationId]);
 
-  /* Load threads on mount */
-  useEffect(() => {
-    loadThreads();
+  /* Load thread messages */
+  const loadMessages = useCallback(async (threadId) => {
+    if (threadId === "new") return;
+    try {
+      const res = await fetch(`/api/thread/${threadId}/messages`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      const msgs = await res.json();
+      const formatted = msgs.map((m) => ({
+        id: m._id,
+        role: m.sender === "ai" ? "assistant" : "user",
+        content: m.message,
+        sources: m.sources || [],
+        ts: new Date(m.createdAt).getTime(),
+      }));
+      setConversations((prev) =>
+        prev.map((c) => (c.id === threadId ? { ...c, messages: formatted } : c))
+      );
+    } catch (err) {
+      console.error("Error loading thread messages:", err);
+    }
   }, []);
 
   /* Load threads from backend API */
-  const loadThreads = async () => {
+  const loadThreads = useCallback(async () => {
     try {
-      setIsLoading(true);
       const res = await fetch("/api/threads", {
         headers: {
           "Content-Type": "application/json",
@@ -135,40 +154,65 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [loadMessages]);
 
-  /* Load thread messages */
-  const loadMessages = async (threadId) => {
-    if (threadId === "new") return;
-    try {
-      const res = await fetch(`/api/thread/${threadId}/messages`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-      const msgs = await res.json();
-      const formatted = msgs.map((m) => ({
-        id: m._id,
-        role: m.sender === "ai" ? "assistant" : "user",
-        content: m.message,
-        sources: m.sources || [],
-        ts: new Date(m.createdAt).getTime(),
-      }));
-      setConversations((prev) =>
-        prev.map((c) => (c.id === threadId ? { ...c, messages: formatted } : c))
-      );
-    } catch (err) {
-      console.error("Error loading thread messages:", err);
-    }
-  };
+  /* Load threads on mount */
+  useEffect(() => {
+    let ignore = false;
+    const fetchThreads = async () => {
+      try {
+        const res = await fetch("/api/threads", {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        const data = await res.json();
+        if (!ignore) {
+          if (data && data.length > 0) {
+            const formatted = data.map((t) => ({
+              id: t._id,
+              title: t.title,
+              createdAt: new Date(t.createdAt).getTime(),
+              updatedAt: new Date(t.updatedAt).getTime(),
+              messages: [],
+            }));
+            setConversations(formatted);
+            setActiveConversationId(formatted[0].id);
+            loadMessages(formatted[0].id);
+          } else {
+            const conv = newConversation();
+            setConversations([conv]);
+            setActiveConversationId(conv.id);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading threads:", err);
+        if (!ignore) {
+          const conv = newConversation();
+          setConversations([conv]);
+          setActiveConversationId(conv.id);
+        }
+      } finally {
+        if (!ignore) setIsLoading(false);
+      }
+    };
+    fetchThreads();
+    return () => {
+      ignore = true;
+    };
+  }, [loadMessages]);
 
   useEffect(() => {
     if (activeConversationId && activeConversationId !== "new") {
       const conv = conversations.find((c) => c.id === activeConversationId);
-      if (conv && conv.messages.length === 0) loadMessages(activeConversationId);
+      if (conv && conv.messages.length === 0) {
+        (async () => {
+          await loadMessages(activeConversationId);
+        })();
+      }
     }
-  }, [activeConversationId]);
+  }, [activeConversationId, conversations, loadMessages]);
 
   /* State Management Helpers */
   const upsertConversation = (conv) => {
@@ -419,10 +463,6 @@ export default function ChatPage() {
                 <Upload className="w-4 h-4 text-emerald-500 shrink-0" />
                 <span>Upload Documents</span>
               </Link>
-              <div className="pt-2 flex items-center justify-between px-2">
-                <span className="text-[11px] text-slate-400 font-medium">Appearance</span>
-                <ThemeToggle />
-              </div>
             </div>
           </div>
         </aside>

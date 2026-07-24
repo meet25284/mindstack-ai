@@ -68,7 +68,8 @@ export async function POST(request) {
             //save into db
             const colFile = await File.create({
                 title: title,
-                path: filePath
+                path: filePath,
+                userId: user._id
             });
 
             const chunks = await textconverter(file, buffer);

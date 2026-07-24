@@ -21,7 +21,6 @@ import DeleteDialog from "@/components/DeleteDialog";
 import FileViewerModal from "@/components/FileViewerModal";
 import FileDetailsModal from "@/components/FileDetailsModal";
 import Toast from "@/components/Toast";
-import ThemeToggle from "@/components/ThemeToggle";
 import { MessageSquare } from "lucide-react";
 
 export default function KnowledgePage() {
@@ -110,7 +109,6 @@ export default function KnowledgePage() {
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
             </button>
 
-            <ThemeToggle />
 
             <Link
               href="/upload"

@@ -64,7 +64,7 @@ export default function SourceCitationPanel({ sources = [], onInspectSource }) {
                   </div>
 
                   <blockquote className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 font-mono text-[11px] leading-relaxed border-l-2 border-indigo-500 line-clamp-3">
-                    "{src.content}"
+                    &quot;{src.content}&quot;
                   </blockquote>
 
                   {src.knowledgeId && onInspectSource && (

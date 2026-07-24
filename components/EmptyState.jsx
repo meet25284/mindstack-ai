@@ -12,7 +12,7 @@ export default function EmptyState({ isFiltered, onResetFilters }) {
         </div>
         <h3 className="text-xl font-bold text-slate-100 mb-2">No matching documents</h3>
         <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-          We couldn't find any knowledge base files matching your search query or selected filter criteria.
+          We couldn&apos;t find any knowledge base files matching your search query or selected filter criteria.
         </p>
         <button
           onClick={onResetFilters}

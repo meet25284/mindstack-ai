@@ -28,7 +28,12 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const containerRef = useRef(null);
+  const [prevDocId, setPrevDocId] = useState(null);
+
+  if (isOpen && doc?.id !== prevDocId) {
+    setPrevDocId(doc?.id);
+    setActiveTab(doc?.fileType?.toLowerCase() === "pdf" ? "preview" : "text");
+  }
 
   useEffect(() => {
     if (!isOpen || !doc) return;
@@ -36,12 +41,6 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
     let createdUrl = null;
     const ext = doc.fileType?.toLowerCase();
     const isPdfFile = ext === "pdf";
-
-    if (isPdfFile) {
-      setActiveTab("preview");
-    } else {
-      setActiveTab("text");
-    }
 
     const loadData = async () => {
       setIsLoading(true);

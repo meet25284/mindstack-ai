@@ -34,9 +34,9 @@ export function useKnowledge() {
   // Fetch Documents
   const fetchDocuments = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
     try {
       const data = await knowledgeService.getDocuments();
+      setError(null);
       setDocuments(data);
     } catch (err) {
       if (err.message === "Unauthorized") {
@@ -50,8 +50,33 @@ export function useKnowledge() {
   }, [router]);
 
   useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
+    let ignore = false;
+    const load = async () => {
+      try {
+        const data = await knowledgeService.getDocuments();
+        if (!ignore) {
+          setError(null);
+          setDocuments(data);
+        }
+      } catch (err) {
+        if (!ignore) {
+          if (err.message === "Unauthorized") {
+            router.push("/login");
+            return;
+          }
+          setError(err.message || "Failed to load documents");
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    };
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, [router]);
 
   // Handle Deletion - UI updates immediately without page refresh
   const removeDocument = useCallback(
@@ -120,10 +145,13 @@ export function useKnowledge() {
     return result;
   }, [documents, searchQuery, sortBy, typeFilter]);
 
-  // Reset page when filters change
-  useEffect(() => {
+  // Reset page when filters change (during render)
+  const filterKey = `${searchQuery}|${sortBy}|${typeFilter}`;
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey);
     setCurrentPage(1);
-  }, [searchQuery, sortBy, typeFilter]);
+  }
 
   // Pagination calculation
   const totalPages = Math.max(1, Math.ceil(filteredDocuments.length / pageSize));

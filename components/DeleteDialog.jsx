@@ -20,7 +20,7 @@ export default function DeleteDialog({ isOpen, onClose, onConfirm, doc, isDeleti
 
         {/* Title & Description */}
         <h3 id="delete-dialog-title" className="text-xl font-bold text-slate-100 mb-2">
-          Delete "{doc.title || doc.fileName}"?
+          Delete &quot;{doc.title || doc.fileName}&quot;?
         </h3>
         
         <p className="text-sm text-slate-400 mb-5 leading-relaxed">

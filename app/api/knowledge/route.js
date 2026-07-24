@@ -17,7 +17,7 @@ export async function GET(request) {
     await connectDB();
 
     // Retrieve all active documents
-    const files = await File.find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 });
+    const files = await File.find({ userId: user._id, isDeleted: { $ne: true } }).sort({ createdAt: -1 });
 
     const documents = await Promise.all(
       files.map(async (doc) => {
@@ -26,7 +26,7 @@ export async function GET(request) {
         let objId = null;
         try {
           objId = new ObjectId(idStr);
-        } catch (e) {}
+        } catch (e) { }
 
         const matchConditions = [
           { knowledgeId: idStr },

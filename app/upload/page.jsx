@@ -101,7 +101,7 @@ export default function UploadPage() {
                     <div className="text-center mb-8">
                         <h2 className="text-2xl font-bold text-gray-900 mb-2">Upload Knowledge Base</h2>
                         <p className="text-sm text-gray-500">
-                            Upload documents to enrich MindStack AI's knowledge base. Supported formats: PDF, TXT, DOCX, MD.
+                            Upload documents to enrich MindStack AI&apos;s knowledge base. Supported formats: PDF, TXT, DOCX, MD.
                         </p>
                     </div>
 
