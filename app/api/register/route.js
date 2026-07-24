@@ -1,5 +1,5 @@
 import User from "@/models/users";
-import { welcomeEmail } from "@/services/mail";
+import { verifyEmail, welcomeEmail } from "@/services/mail";
 import { registerValidater } from "@/validations/validate";
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
@@ -40,7 +40,7 @@ export async function POST(req) {
         });
 
         await welcomeEmail(body.email);
-
+        await verifyEmail(body.email)
         return NextResponse.json({
             success: true,
             message: "User created successfully",

@@ -1,6 +1,6 @@
 import User from "@/models/users";
 import { createToken } from "@/services/jwt";
-import { verifyOTP } from "@/services/mail";
+import { verifyEmail, verifyOTP } from "@/services/mail";
 import { NextResponse } from "next/server";
 
 export async function POST(req) {
@@ -18,7 +18,13 @@ export async function POST(req) {
             message: "Invalid OTP"
         }, { status: 400 });
     } else if (verified) {
-        const user = await User.findOne({ email: body.email })
+        const user = await User.findOne({ email: body.email, isVerified: true })
+        if (!user) {
+            await verifyEmail(body.email);
+            return NextResponse.json({
+                message: "User not found or you didn't verify your email"
+            }, { status: 404 });
+        }
         const token = createToken(user._id);
         return NextResponse
             .json({

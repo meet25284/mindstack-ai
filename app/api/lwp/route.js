@@ -3,7 +3,7 @@ import { LoginValidater } from "@/validations/validate";
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import { createToken } from "@/services/jwt";
-import { welcomeEmail } from "@/services/mail";
+import { verifyEmail, welcomeEmail } from "@/services/mail";
 
 export async function POST(req) {
   try {
@@ -18,11 +18,12 @@ export async function POST(req) {
       );
     }
 
-    const user = await User.findOne({ email: data.email });
+    const user = await User.findOne({ email: data.email, isVerified: true });
 
     if (!user) {
+      await verifyEmail(data.email);
       return NextResponse.json(
-        { message: "User not found" },
+        { message: "User not found or you didn't verify your email" },
         { status: 404 }
       );
     }
