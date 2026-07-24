@@ -28,12 +28,7 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const [prevDocId, setPrevDocId] = useState(null);
-
-  if (isOpen && doc?.id !== prevDocId) {
-    setPrevDocId(doc?.id);
-    setActiveTab(doc?.fileType?.toLowerCase() === "pdf" ? "preview" : "text");
-  }
+  const containerRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen || !doc) return;
@@ -41,6 +36,12 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
     let createdUrl = null;
     const ext = doc.fileType?.toLowerCase();
     const isPdfFile = ext === "pdf";
+
+    if (isPdfFile) {
+      setActiveTab("preview");
+    } else {
+      setActiveTab("text");
+    }
 
     const loadData = async () => {
       setIsLoading(true);
@@ -107,9 +108,8 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in">
       <div
         ref={containerRef}
-        className={`w-full bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100 transition-all duration-300 ${
-          isFullscreen ? "h-screen max-w-none rounded-none" : "max-w-6xl h-[90vh]"
-        }`}
+        className={`w-full bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100 transition-all duration-300 ${isFullscreen ? "h-screen max-w-none rounded-none" : "max-w-6xl h-[90vh]"
+          }`}
         role="dialog"
         aria-modal="true"
       >
@@ -141,11 +141,10 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
               {isPdf && pdfBlobUrl && (
                 <button
                   onClick={() => setActiveTab("preview")}
-                  className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-semibold transition-all ${
-                    activeTab === "preview"
+                  className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-semibold transition-all ${activeTab === "preview"
                       ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
                       : "text-slate-400 hover:text-slate-200"
-                  }`}
+                    }`}
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>PDF Viewer</span>
@@ -153,11 +152,10 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
               )}
               <button
                 onClick={() => setActiveTab("text")}
-                className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-semibold transition-all ${
-                  activeTab === "text"
+                className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-semibold transition-all ${activeTab === "text"
                     ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
                     : "text-slate-400 hover:text-slate-200"
-                }`}
+                  }`}
               >
                 <Code className="w-3.5 h-3.5" />
                 <span>Extracted Content</span>

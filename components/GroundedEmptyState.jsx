@@ -76,7 +76,7 @@ export default function GroundedEmptyState({ type = "onboarding", onSampleClick 
               className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700/60 text-xs font-medium text-slate-700 dark:text-slate-200 transition-all shadow-sm group"
             >
               <div className="flex items-start justify-between gap-2">
-                <span>&quot;{q}&quot;</span>
+                <span>"{q}"</span>
                 <Search className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 shrink-0 mt-0.5" />
               </div>
             </button>
