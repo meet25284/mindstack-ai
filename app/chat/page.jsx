@@ -120,42 +120,6 @@ export default function ChatPage() {
     }
   }, []);
 
-  /* Load threads from backend API */
-  const loadThreads = useCallback(async () => {
-    try {
-      const res = await fetch("/api/threads", {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-      const data = await res.json();
-      if (data && data.length > 0) {
-        const formatted = data.map((t) => ({
-          id: t._id,
-          title: t.title,
-          createdAt: new Date(t.createdAt).getTime(),
-          updatedAt: new Date(t.updatedAt).getTime(),
-          messages: [],
-        }));
-        setConversations(formatted);
-        setActiveConversationId(formatted[0].id);
-        loadMessages(formatted[0].id);
-      } else {
-        const conv = newConversation();
-        setConversations([conv]);
-        setActiveConversationId(conv.id);
-      }
-    } catch (err) {
-      console.error("Error loading threads:", err);
-      const conv = newConversation();
-      setConversations([conv]);
-      setActiveConversationId(conv.id);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadMessages]);
-
   /* Load threads on mount */
   useEffect(() => {
     let ignore = false;
