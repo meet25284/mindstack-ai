@@ -1,3 +1,4 @@
+import GlobalErrorListener from "@/components/GlobalErrorListener";
 import "../globals.css";
 
 
@@ -10,6 +11,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <GlobalErrorListener />
       <body>{children}</body>
     </html>
   );
