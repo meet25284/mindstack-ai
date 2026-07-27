@@ -1,0 +1,18 @@
+import "./globals.css";
+import GlobalErrorListener from "@/components/GlobalErrorListener";
+
+export const metadata = {
+  title: "Mindstack AI",
+  description: "It's an RAG app which gives response according to its knowledge base",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <GlobalErrorListener />
+        {children}
+      </body>
+    </html>
+  );
+}
