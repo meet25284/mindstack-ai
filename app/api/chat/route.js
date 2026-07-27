@@ -8,8 +8,8 @@ import Conversation from "@/models/conversation";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/middleware/auth";
 import { generateBatchEmbeddings } from "@/services/generateEmbedding";
-import runVectorSearch from "@/services/vectorSearch";
-import buildSystemPrompt from "@/services/promptBuilder";
+import buildSystemPrompt from "@/services/rag/promptBuilder";
+import { hybridSearch } from "@/services/rag/hybridSearch";
 
 
 const model = openai("gpt-4o-mini");
@@ -111,8 +111,9 @@ Never pass meta-phrases like "try again", "retry", or "regenerate" directly as t
                         const userEmbedding = await generateBatchEmbeddings(formattedHistory[formattedHistory.length - 3].content);
 
                         // Search similar chunks from MongoDB Vector Search
-                        const vectorResult = await runVectorSearch(userEmbedding);
-                        const context = vectorResult
+                        const hybridResult = await hybridSearch(prompt,userEmbedding );
+
+                        const context = hybridResult
                             .map(chunk => chunk.content)
                             .join("\n\n");
                         return `You are MindStack AI, a knowledge assistant. You answer ONLY using the 
@@ -158,20 +159,21 @@ ${context}
             // Generate embedding for user's question
             const userEmbedding = await generateBatchEmbeddings(prompt);
 
-            // Search similar chunks from MongoDB Vector Search
-            const vectorResult = await runVectorSearch(userEmbedding);
+            // Search similar chunks from MongoDB hybrid Search
+            const hybridResult = await hybridSearch(prompt, userEmbedding);
 
-            const cleanSources = Array.isArray(vectorResult)
-                ? vectorResult.map((v) => ({
+            const context = hybridResult
+                            .map(chunk => chunk.content)
+                            .join("\n\n");
+
+            const cleanSources = Array.isArray(hybridResult)
+                ? hybridResult.map((v) => ({
                     knowledgeId: v.knowledgeId ? v.knowledgeId.toString() : "",
                     content: v.content || "",
                     score: v.score || 0,
                 }))
                 : [];
 
-            const context = vectorResult
-                .map(chunk => chunk.content)
-                .join("\n\n");
 
             const result = streamText({
                 model,
