@@ -64,7 +64,7 @@ export const verifyOTP = (email, otp) => {
 };
 
 export const verifyEmail = async (email) => {
-    const verificationToken = jwt.sign({email}, process.env.JWT_SECRET || "secret", { expiresIn: "24h" });
+    const verificationToken = jwt.sign({email}, process.env.JWT_SECRET, { expiresIn: "2m" });
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const verificationLink = `${baseUrl}/api/verify-email/${verificationToken}`;
     

@@ -7,35 +7,9 @@ import { generateText, stepCountIs, streamText, tool } from "ai";
 import Conversation from "@/models/conversation";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/middleware/auth";
-import { generateBatchEmbeddings } from "@/services/generateEmbedding";
+import { generateBatchEmbeddings, generateResponse, generateTitle, updateUsage } from "@/services/model";
 import buildSystemPrompt from "@/services/rag/promptBuilder";
 import { hybridSearch } from "@/services/rag/hybridSearch";
-
-
-const model = openai("gpt-4o-mini");
-
-// ---------------- Generate Title ----------------
-
-const generateTitle = async (message) => {
-    if (process.env.NODE_ENV === "test") {
-        return "Mocked Title";
-    }
-
-    try {
-        const { text } = await generateText({
-            model,
-            system:
-                "Generate a very short chat title (maximum 4 words, no quotes, no markdown).",
-            prompt: message,
-        });
-
-        return text.trim() || "New Chat";
-    } catch (err) {
-        console.error(err);
-
-        return message.split(" ").slice(0, 5).join(" ") || "New Chat";
-    }
-};
 
 // ---------------- POST ----------------
 
@@ -51,6 +25,7 @@ export async function POST(req) {
             // ---------------- Thread ----------------
 
             if (!threadId || threadId === "new" || threadId === "new chat") {
+                // ---------------- Generate Title ----------------
                 const title = await generateTitle(prompt);
 
                 const thread = await Thread.create({
@@ -111,7 +86,7 @@ Never pass meta-phrases like "try again", "retry", or "regenerate" directly as t
                         const userEmbedding = await generateBatchEmbeddings(formattedHistory[formattedHistory.length - 3].content);
 
                         // Search similar chunks from MongoDB Vector Search
-                        const hybridResult = await hybridSearch(prompt,userEmbedding );
+                        const hybridResult = await hybridSearch(prompt, userEmbedding);
 
                         const context = hybridResult
                             .map(chunk => chunk.content)
@@ -163,8 +138,8 @@ ${context}
             const hybridResult = await hybridSearch(prompt, userEmbedding);
 
             const context = hybridResult
-                            .map(chunk => chunk.content)
-                            .join("\n\n");
+                .map(chunk => chunk.content)
+                .join("\n\n");
 
             const cleanSources = Array.isArray(hybridResult)
                 ? hybridResult.map((v) => ({
@@ -175,13 +150,9 @@ ${context}
                 : [];
 
 
-            const result = streamText({
-                model,
-                system: buildSystemPrompt(context),
-                tools,
-                messages: formattedHistory,
-                stopWhen: stepCountIs(5),
-            });
+            const result = await generateResponse(buildSystemPrompt(context), formattedHistory, tools)
+            await updateUsage(user._id);
+            
 
             let fullResponse = "";
 

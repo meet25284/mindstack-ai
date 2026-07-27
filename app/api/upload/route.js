@@ -4,7 +4,7 @@ import path from "path";
 import File from "@/models/files";
 import { isAuthenticated } from "@/middleware/auth";
 import { textconverter } from "@/services/textconverter";
-import { generateBatchEmbeddings } from "@/services/generateEmbedding";
+import { generateBatchEmbeddings } from "@/services/model";
 import { db } from "@/lib/mongodb";
 
 
