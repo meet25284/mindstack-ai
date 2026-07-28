@@ -13,7 +13,7 @@ export async function POST(req) {
             return NextResponse.json(
                 {
                     success: false,
-                    message: result.error.issues,
+                    message: result.error.issues[0]?.message || "Validation failed",
                 },
                 { status: 400 }
             );

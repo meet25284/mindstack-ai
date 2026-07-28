@@ -689,6 +689,7 @@ export default function ChatPage() {
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={onKeyDown}
                     rows={1}
+                    maxLength={4000}
                     disabled={isSending || isLoading}
                     placeholder="Ask a question strictly answered from your knowledge base..."
                     className="flex-1 bg-transparent border-0 focus:ring-0 resize-none text-slate-900 dark:text-slate-100 text-sm placeholder-slate-400 outline-none leading-relaxed min-h-[44px] max-h-[140px]"
@@ -696,7 +697,7 @@ export default function ChatPage() {
 
                   <button
                     onClick={() => sendMessage()}
-                    disabled={isSending || isLoading || !draft.trim()}
+                    disabled={isSending || isLoading || !draft.trim() || draft.length > 4000}
                     className="p-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 shadow-md shadow-indigo-600/20 transition-all shrink-0"
                     title="Send query"
                   >

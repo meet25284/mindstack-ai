@@ -12,45 +12,111 @@ export default function RegisterPage() {
     email: '',
     password: '',
   });
+
+  const [touched, setTouched] = useState({
+    name: false,
+    email: false,
+    password: false,
+  });
+
+  const [fieldErrors, setFieldErrors] = useState({
+    name: '',
+    email: '',
+    password: '',
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedInput, setFocusedInput] = useState(null);
-  const [error, setError] = useState('');
+  const [serverError, setServerError] = useState('');
+
+  const validateField = (name, value) => {
+    const trimmed = value ? value.trim() : '';
+    switch (name) {
+      case 'name':
+        if (!trimmed) return 'Full name is required';
+        if (trimmed.length < 2) return 'Full name must be at least 2 characters';
+        return '';
+      case 'email':
+        if (!trimmed) return 'Email address is required';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return 'Please enter a valid email address';
+        return '';
+      case 'password':
+        if (!value) return 'Password is required';
+        if (value.length < 8) return 'Password must be at least 8 characters';
+        return '';
+      default:
+        return '';
+    }
+  };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setError('');
+    const { name, value } = e.target;
+    const newFormData = { ...formData, [name]: value };
+    setFormData(newFormData);
+    setServerError('');
+
+    if (touched[name]) {
+      const errorMsg = validateField(name, value);
+      setFieldErrors((prev) => ({ ...prev, [name]: errorMsg }));
+    }
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    setFocusedInput(null);
+    const errorMsg = validateField(name, value);
+    setFieldErrors((prev) => ({ ...prev, [name]: errorMsg }));
+  };
+
+  const validateForm = () => {
+    const errors = {
+      name: validateField('name', formData.name),
+      email: validateField('email', formData.email),
+      password: validateField('password', formData.password),
+    };
+
+    setFieldErrors(errors);
+    setTouched({ name: true, email: true, password: true });
+
+    return !errors.name && !errors.email && !errors.password;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    setError('');
+    setServerError('');
 
-    // Basic validation
-    if (!formData.name || !formData.email || !formData.password) {
-      setError('Please fill in all fields');
-      setIsSubmitting(false);
+    if (!validateForm()) {
       return;
     }
-    else {
+
+    setIsSubmitting(true);
+    const payload = {
+      name: formData.name.trim(),
+      email: formData.email.trim(),
+      password: formData.password,
+    };
+
+    try {
       const response = await fetch("/api/register", {
         method: "POST",
-        body: JSON.stringify(formData),
-      })
-      setIsSubmitting(false);
-      setFormData({
-        name: "",
-        email: "",
-        password: "",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      const result = await response.json()
-      if (result.success) {
-        router.push('/login');
 
-        return setError(result.message)
+      const result = await response.json();
+      setIsSubmitting(false);
+
+      if (result.success) {
+        setFormData({ name: "", email: "", password: "" });
+        setTouched({ name: false, email: false, password: false });
+        router.push('/login');
       } else {
-        return setError(result.message)
+        setServerError(result.message || 'Registration failed');
       }
+    } catch (err) {
+      setIsSubmitting(false);
+      setServerError('An unexpected error occurred. Please try again.');
     }
   };
 
@@ -75,79 +141,85 @@ export default function RegisterPage() {
             <p className="text-gray-400 text-sm font-medium tracking-wide">Enterprise RAG Knowledge Assistant</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+            {serverError && (
               <div className="p-3 text-sm text-red-400 bg-red-900/20 border border-red-900/50 rounded-lg text-center animate-fade-in">
-                {error}
+                {serverError}
               </div>
             )}
 
             <div className="space-y-5">
               {/* Name Input */}
               <div className="relative group">
-                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors duration-300 ${focusedInput === 'name' ? 'text-indigo-400' : 'text-gray-500'}`}>
-                  {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg> */}
-                </div>
                 <input
                   type="text"
                   name="name"
                   id="name"
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-800 rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-300 sm:text-sm"
-                  placeholder=" Full Name"
+                  className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${
+                    touched.name && fieldErrors.name
+                      ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
+                      : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
+                  }`}
+                  placeholder="Full Name"
                   value={formData.name}
                   onChange={handleChange}
                   onFocus={() => setFocusedInput('name')}
-                  onBlur={() => setFocusedInput(null)}
+                  onBlur={handleBlur}
                 />
+                {touched.name && fieldErrors.name && (
+                  <p className="mt-1 text-xs text-red-400 font-medium pl-1 animate-fade-in">{fieldErrors.name}</p>
+                )}
               </div>
 
               {/* Email Input */}
               <div className="relative group">
-                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors duration-300 ${focusedInput === 'email' ? 'text-indigo-400' : 'text-gray-500'}`}>
-                  {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg> */}
-                </div>
                 <input
                   type="email"
                   name="email"
                   id="email"
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-800 rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-300 sm:text-sm"
-                  placeholder=" Email Address"
+                  className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${
+                    touched.email && fieldErrors.email
+                      ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
+                      : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
+                  }`}
+                  placeholder="Email Address"
                   value={formData.email}
                   onChange={handleChange}
                   onFocus={() => setFocusedInput('email')}
-                  onBlur={() => setFocusedInput(null)}
+                  onBlur={handleBlur}
                 />
+                {touched.email && fieldErrors.email && (
+                  <p className="mt-1 text-xs text-red-400 font-medium pl-1 animate-fade-in">{fieldErrors.email}</p>
+                )}
               </div>
 
               {/* Password Input */}
               <div className="relative group">
-                <div className={`absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors duration-300 ${focusedInput === 'password' ? 'text-indigo-400' : 'text-gray-500'}`}>
-                  {/* <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg> */}
-                </div>
                 <input
                   type="password"
                   name="password"
                   id="password"
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-800 rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-300 sm:text-sm"
-                  placeholder=" Password"
+                  className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${
+                    touched.password && fieldErrors.password
+                      ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
+                      : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
+                  }`}
+                  placeholder="Password (min 8 characters)"
                   value={formData.password}
                   onChange={handleChange}
                   onFocus={() => setFocusedInput('password')}
-                  onBlur={() => setFocusedInput(null)}
+                  onBlur={handleBlur}
                 />
+                {touched.password && fieldErrors.password && (
+                  <p className="mt-1 text-xs text-red-400 font-medium pl-1 animate-fade-in">{fieldErrors.password}</p>
+                )}
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-900 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden"
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-900 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group relative overflow-hidden mt-2"
             >
               <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:animate-[shimmer_1.5s_infinite]" />
               {isSubmitting ? (
@@ -180,7 +252,6 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* Add custom keyframes inline for simplicity */}
       <style dangerouslySetInnerHTML={{
         __html: `
         @keyframes shimmer {

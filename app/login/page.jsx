@@ -1,11 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-
-
 
 export default function LoginPage() {
     const router = useRouter();
@@ -19,72 +16,126 @@ export default function LoginPage() {
         otp: '',
     });
 
+    const [touched, setTouched] = useState({
+        email: false,
+        password: false,
+        otp: false,
+    });
+
+    const [fieldErrors, setFieldErrors] = useState({
+        email: '',
+        password: '',
+        otp: '',
+    });
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [focusedInput, setFocusedInput] = useState(null);
-    const [error, setError] = useState('');
+    const [serverError, setServerError] = useState('');
     const [message, setMessage] = useState('');
 
+    const validateField = (name, value) => {
+        const trimmed = value ? value.trim() : '';
+        switch (name) {
+            case 'email':
+                if (!trimmed) return 'Email address is required';
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return 'Please enter a valid email address';
+                return '';
+            case 'password':
+                if (loginMethod !== 'password') return '';
+                if (!value) return 'Password is required';
+                if (value.length < 8) return 'Password must be at least 8 characters';
+                return '';
+            case 'otp':
+                if (loginMethod !== 'otp' || !otpSent) return '';
+                if (!trimmed) return 'OTP code is required';
+                if (!/^\d{6}$/.test(trimmed)) return 'OTP must be exactly 6 numeric digits';
+                return '';
+            default:
+                return '';
+        }
+    };
+
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-        setError('');
+        const { name, value } = e.target;
+        const newFormData = { ...formData, [name]: value };
+        setFormData(newFormData);
+        setServerError('');
         setMessage('');
+
+        if (touched[name]) {
+            const errorMsg = validateField(name, value);
+            setFieldErrors((prev) => ({ ...prev, [name]: errorMsg }));
+        }
+    };
+
+    const handleBlur = (e) => {
+        const { name, value } = e.target;
+        setTouched((prev) => ({ ...prev, [name]: true }));
+        setFocusedInput(null);
+        const errorMsg = validateField(name, value);
+        setFieldErrors((prev) => ({ ...prev, [name]: errorMsg }));
     };
 
     const handlePasswordLogin = async (e) => {
         e.preventDefault();
-        setIsSubmitting(true);
-        setError('');
+        setServerError('');
 
-        if (!formData.email || !formData.password) {
-            setError('Please fill in all fields');
-            setIsSubmitting(false);
+        const emailErr = validateField('email', formData.email);
+        const passwordErr = validateField('password', formData.password);
+
+        setFieldErrors((prev) => ({ ...prev, email: emailErr, password: passwordErr }));
+        setTouched((prev) => ({ ...prev, email: true, password: true }));
+
+        if (emailErr || passwordErr) {
             return;
         }
+
+        setIsSubmitting(true);
 
         try {
             const response = await fetch("/api/lwp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: formData.email, password: formData.password }),
+                body: JSON.stringify({ email: formData.email.trim(), password: formData.password }),
             });
             const result = await response.json();
 
             setIsSubmitting(false);
 
             if (response.status === 200) {
-                setFormData({
-                    email: "",
-                    password: "",
-                });
-                localStorage.setItem("token", result.token)
+                setFormData({ email: "", password: "", otp: "" });
+                setTouched({ email: false, password: false, otp: false });
+                localStorage.setItem("token", result.token);
                 router.push('/chat');
-
             } else {
-                setError(result.message || 'Login failed');
+                setServerError(result.message || 'Login failed');
             }
         } catch (err) {
             setIsSubmitting(false);
-            setError('An error occurred. Please try again.');
+            setServerError('An error occurred. Please try again.');
         }
     };
 
     const handleSendOtp = async (e) => {
         e.preventDefault();
-        setIsSubmitting(true);
-        setError('');
+        setServerError('');
         setMessage('');
 
-        if (!formData.email) {
-            setError('Please enter your email');
-            setIsSubmitting(false);
+        const emailErr = validateField('email', formData.email);
+        setFieldErrors((prev) => ({ ...prev, email: emailErr }));
+        setTouched((prev) => ({ ...prev, email: true }));
+
+        if (emailErr) {
             return;
         }
+
+        setIsSubmitting(true);
 
         try {
             const response = await fetch("/api/sendotp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: formData.email }),
+                body: JSON.stringify({ email: formData.email.trim() }),
             });
             const result = await response.json();
 
@@ -92,54 +143,50 @@ export default function LoginPage() {
 
             if (response.ok) {
                 setOtpSent(true);
-                setMessage(result.message);
+                setMessage(result.message || 'OTP sent to your email');
             } else {
-                setError(result.message || 'Login failed');
+                setServerError(result.message || 'Failed to send OTP');
             }
         } catch (err) {
             setIsSubmitting(false);
-            setError('An error occurred. Please try again.');
+            setServerError('An error occurred. Please try again.');
         }
-
-
     };
 
     const handleVerifyOtp = async (e) => {
         e.preventDefault();
-        setIsSubmitting(true);
-        setError('');
+        setServerError('');
 
-        if (!formData.otp) {
-            setError('Please enter the OTP');
-            setIsSubmitting(false);
+        const otpErr = validateField('otp', formData.otp);
+        setFieldErrors((prev) => ({ ...prev, otp: otpErr }));
+        setTouched((prev) => ({ ...prev, otp: true }));
+
+        if (otpErr) {
             return;
         }
+
+        setIsSubmitting(true);
 
         try {
             const response = await fetch("/api/verifyotp", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: formData.email, otp: formData.otp }),
+                body: JSON.stringify({ email: formData.email.trim(), otp: formData.otp.trim() }),
             });
             const result = await response.json();
             setIsSubmitting(false);
             if (response.ok) {
-                setOtpSent(true);
                 setMessage(result.message);
+                localStorage.setItem("token", result.token);
                 router.push('/chat');
-                setFormData({
-                    email: "",
-                    otp: "",
-                });
-                localStorage.setItem("token", result.token)
+                setFormData({ email: "", password: "", otp: "" });
             } else {
-                setError(result.message || 'Login failed');
+                setServerError(result.message || 'OTP Verification failed');
             }
         } catch (err) {
             setIsSubmitting(false);
-            setError('An error occurred. Please try again.');
+            setServerError('An error occurred. Please try again.');
         }
-
     };
 
     return (
@@ -168,10 +215,11 @@ export default function LoginPage() {
                     <form
                         onSubmit={loginMethod === 'password' ? handlePasswordLogin : (otpSent ? handleVerifyOtp : handleSendOtp)}
                         className="space-y-5"
+                        noValidate
                     >
-                        {error && (
+                        {serverError && (
                             <div className="p-3 text-sm text-red-400 bg-red-900/20 border border-red-900/50 rounded-lg text-center animate-fade-in">
-                                {error}
+                                {serverError}
                             </div>
                         )}
                         {message && (
@@ -187,14 +235,21 @@ export default function LoginPage() {
                                     type="email"
                                     name="email"
                                     id="email"
-                                    className="block w-full px-4 py-3 border border-gray-800 rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-300 sm:text-sm"
-                                    placeholder=" Email Address"
+                                    className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${
+                                        touched.email && fieldErrors.email
+                                            ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
+                                            : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
+                                    }`}
+                                    placeholder="Email Address"
                                     value={formData.email}
                                     onChange={handleChange}
                                     onFocus={() => setFocusedInput('email')}
-                                    onBlur={() => setFocusedInput(null)}
+                                    onBlur={handleBlur}
                                     disabled={otpSent}
                                 />
+                                {touched.email && fieldErrors.email && (
+                                    <p className="mt-1 text-xs text-red-400 font-medium pl-1 animate-fade-in">{fieldErrors.email}</p>
+                                )}
                             </div>
 
                             {/* Password Input */}
@@ -204,13 +259,20 @@ export default function LoginPage() {
                                         type="password"
                                         name="password"
                                         id="password"
-                                        className="block w-full px-4 py-3 border border-gray-800 rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-300 sm:text-sm"
-                                        placeholder=" Password"
+                                        className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${
+                                            touched.password && fieldErrors.password
+                                                ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
+                                                : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
+                                        }`}
+                                        placeholder="Password"
                                         value={formData.password}
                                         onChange={handleChange}
                                         onFocus={() => setFocusedInput('password')}
-                                        onBlur={() => setFocusedInput(null)}
+                                        onBlur={handleBlur}
                                     />
+                                    {touched.password && fieldErrors.password && (
+                                        <p className="mt-1 text-xs text-red-400 font-medium pl-1 animate-fade-in">{fieldErrors.password}</p>
+                                    )}
                                 </div>
                             )}
 
@@ -221,14 +283,21 @@ export default function LoginPage() {
                                         type="text"
                                         name="otp"
                                         id="otp"
-                                        className="block w-full px-4 py-3 border border-gray-800 rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-300 sm:text-sm text-center tracking-widest text-lg"
-                                        placeholder=" Enter OTP"
+                                        className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm text-center tracking-widest text-lg ${
+                                            touched.otp && fieldErrors.otp
+                                                ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
+                                                : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
+                                        }`}
+                                        placeholder="Enter 6-digit OTP"
                                         value={formData.otp}
                                         onChange={handleChange}
                                         onFocus={() => setFocusedInput('otp')}
-                                        onBlur={() => setFocusedInput(null)}
+                                        onBlur={handleBlur}
                                         maxLength={6}
                                     />
+                                    {touched.otp && fieldErrors.otp && (
+                                        <p className="mt-1 text-xs text-red-400 font-medium pl-1 animate-fade-in text-center">{fieldErrors.otp}</p>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -259,8 +328,10 @@ export default function LoginPage() {
                                 onClick={() => {
                                     setLoginMethod(loginMethod === 'password' ? 'otp' : 'password');
                                     setOtpSent(false);
-                                    setError('');
+                                    setServerError('');
                                     setMessage('');
+                                    setTouched({ email: false, password: false, otp: false });
+                                    setFieldErrors({ email: '', password: '', otp: '' });
                                 }}
                                 className="text-sm font-medium text-indigo-400 hover:text-indigo-300 transition-colors bg-transparent border-none cursor-pointer"
                             >
