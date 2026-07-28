@@ -75,6 +75,7 @@ export async function POST(request) {
             const chunks = await textconverter(file, buffer);
             const embeddings = await generateBatchEmbeddings(chunks);
             const docs = chunks.map((chunk, index) => ({
+                userId: user._id,
                 knowledgeId: colFile._id,
                 chunkIndex: index,
                 content: chunk,

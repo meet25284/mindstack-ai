@@ -37,9 +37,10 @@ function resetUsage() {
 const model = openai("gpt-4o-mini");
 
 export async function generateBatchEmbeddings(text) {
+  const values = Array.isArray(text) ? text : [text];
   const { embeddings, usage: tokenUsage } = await embedMany({
     model: openai.embeddingModel('text-embedding-3-small'),
-    values: text
+    values
   });
   usage.set("emb", usage.get("emb") + tokenUsage.tokens);
 

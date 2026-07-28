@@ -3,13 +3,13 @@ import rerank from "./rerank";
 import runVectorSearch from "./vectorSearch";
 
 
-export async function hybridSearch(prompt, userEmbedding) {
+export async function hybridSearch(prompt, userEmbedding, userId) {
 
     const [vectorResult, bm25Result] = await Promise.all([
 
-        runVectorSearch(userEmbedding),
+        runVectorSearch(userEmbedding, userId),
 
-        bm25Search(prompt)
+        bm25Search(prompt, userId)
 
     ]);
 

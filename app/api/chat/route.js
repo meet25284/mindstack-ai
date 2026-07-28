@@ -135,7 +135,7 @@ ${context}
             const userEmbedding = await generateBatchEmbeddings(prompt);
 
             // Search similar chunks from MongoDB hybrid Search
-            const hybridResult = await hybridSearch(prompt, userEmbedding);
+            const hybridResult = await hybridSearch(prompt, userEmbedding, user._id);
 
             const context = hybridResult
                 .map(chunk => chunk.content)
