@@ -1,13 +1,27 @@
 import mongoose from "mongoose";
+import Conversation from "./conversation";
+import User from "./users";
+import Thread from "./thread";
 
 const usageSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: User,
         required: true,
     },
-    embeddingToken: { type: Number, required: true
+    threadId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: Thread,
+        required: true,
     },
+    aiResponseId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: Conversation,
+        required: true,
+    },
+    embeddingToken: { 
+        type: Number, 
+        required: true },
     titleGenerationToken: {
         prompt: { type: Number, required: true },
         output: { type: Number, required: true },

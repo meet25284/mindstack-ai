@@ -10,7 +10,7 @@ import { isAuthenticated } from "@/middleware/auth";
 import { generateBatchEmbeddings, generateResponse, generateTitle, updateUsage } from "@/services/model";
 import buildSystemPrompt from "@/services/rag/promptBuilder";
 import { hybridSearch } from "@/services/rag/hybridSearch";
-import {z} from "zod";
+import { z } from "zod";
 
 // ---------------- POST ----------------
 
@@ -135,7 +135,6 @@ export async function POST(req) {
 
 
             const result = await generateResponse(buildSystemPrompt(), formattedHistory, tools)
-            await updateUsage(user._id);
 
 
             let fullResponse = "";
@@ -176,13 +175,15 @@ export async function POST(req) {
                         });
 
                         // Save AI message with sources
-                        await Conversation.create({
+                        const ai_response = await Conversation.create({
                             ThreadId: threadId,
                             userId: user._id,
                             sender: "ai",
                             message: fullResponse,
                             sources: cleanSources,
                         });
+
+                        const usageDoc = await updateUsage(user._id, ai_response._id, threadId);
 
                         await Thread.findByIdAndUpdate(threadId, {
                             updatedAt: new Date(),
@@ -197,6 +198,9 @@ export async function POST(req) {
                                     threadId,
                                     title: threadInfo?.title || "New Chat",
                                     sources: cleanSources,
+                                    aiResponseId: ai_response._id.toString(),
+                                    totalUsage: usageDoc?.totalUsage || 0,
+                                    usage: usageDoc,
                                 })}\n\n`
                             )
                         );

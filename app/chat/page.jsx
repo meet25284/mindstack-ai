@@ -20,6 +20,7 @@ import {
   Check,
   FolderOpen,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
@@ -28,6 +29,7 @@ import KBScopeIndicator from "@/components/KBScopeIndicator";
 import SourceCitationPanel from "@/components/SourceCitationPanel";
 import GroundedEmptyState from "@/components/GroundedEmptyState";
 import FileViewerModal from "@/components/FileViewerModal";
+import UsageHistoryDropdown from "@/components/UsageHistoryDropdown";
 
 /* ─── Auth Guard ─────────────────────────────────────────────────── */
 function IsAuthenticated({ children }) {
@@ -76,6 +78,13 @@ export default function ChatPage() {
   // Inspector modal state
   const [inspectDoc, setInspectDoc] = useState(null);
 
+  // Usage History state
+  const [isUsageOpen, setIsUsageOpen] = useState(false);
+  const [usageRecords, setUsageRecords] = useState([]);
+  const [usageSummary, setUsageSummary] = useState(null);
+  const [isUsageLoading, setIsUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState(null);
+
   const activeConversation = useMemo(() => {
     const fromId = conversations.find((c) => c.id === activeConversationId);
     return fromId ?? conversations[0] ?? null;
@@ -83,6 +92,17 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  /* Map usage records by aiResponseId for quick message badge lookup */
+  const usageByAiResponseId = useMemo(() => {
+    const map = {};
+    usageRecords.forEach((r) => {
+      if (r.aiResponseId) {
+        map[r.aiResponseId.toString()] = r;
+      }
+    });
+    return map;
+  }, [usageRecords]);
 
   /* Auto-scroll to bottom on new messages */
   useEffect(() => {
@@ -93,6 +113,37 @@ export default function ChatPage() {
   useEffect(() => {
     if (!isSending) inputRef.current?.focus();
   }, [isSending, activeConversationId]);
+
+  /* Fetch usage history for active conversation */
+  const fetchUsageHistory = useCallback(async (threadId) => {
+    if (!threadId || threadId === "new") {
+      setUsageRecords([]);
+      setUsageSummary(null);
+      return;
+    }
+    setIsUsageLoading(true);
+    setUsageError(null);
+    try {
+      const res = await fetch(`/api/usage/${threadId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUsageRecords(data.data || []);
+        setUsageSummary(data.summary || null);
+      } else {
+        setUsageError(data.message || "Failed to fetch token usage history.");
+      }
+    } catch (err) {
+      console.error("Error fetching usage history:", err);
+      setUsageError("Network error while fetching usage history.");
+    } finally {
+      setIsUsageLoading(false);
+    }
+  }, []);
 
   /* Load thread messages */
   const loadMessages = useCallback(async (threadId) => {
@@ -144,6 +195,7 @@ export default function ChatPage() {
             setConversations(formatted);
             setActiveConversationId(formatted[0].id);
             loadMessages(formatted[0].id);
+            fetchUsageHistory(formatted[0].id);
           } else {
             const conv = newConversation();
             setConversations([conv]);
@@ -165,18 +217,24 @@ export default function ChatPage() {
     return () => {
       ignore = true;
     };
-  }, [loadMessages]);
+  }, [loadMessages, fetchUsageHistory]);
 
   useEffect(() => {
     if (activeConversationId && activeConversationId !== "new") {
       const conv = conversations.find((c) => c.id === activeConversationId);
-      if (conv && conv.messages.length === 0) {
-        (async () => {
-          await loadMessages(activeConversationId);
-        })();
-      }
+      queueMicrotask(() => {
+        if (conv && conv.messages.length === 0) {
+          loadMessages(activeConversationId);
+        }
+        fetchUsageHistory(activeConversationId);
+      });
+    } else {
+      queueMicrotask(() => {
+        setUsageRecords([]);
+        setUsageSummary(null);
+      });
     }
-  }, [activeConversationId, conversations, loadMessages]);
+  }, [activeConversationId, conversations, loadMessages, fetchUsageHistory]);
 
   /* State Management Helpers */
   const upsertConversation = (conv) => {
@@ -194,6 +252,8 @@ export default function ChatPage() {
     setConversations((prev) => [conv, ...prev.filter((c) => c.id !== "new")]);
     setActiveConversationId(conv.id);
     setDraft("");
+    setUsageRecords([]);
+    setUsageSummary(null);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
@@ -232,7 +292,14 @@ export default function ChatPage() {
     const now = Date.now();
     const userMsg = { id: makeId(), role: "user", content: text, ts: now };
     const assistantMsgId = makeId();
-    const assistantMsg = { id: assistantMsgId, role: "assistant", content: "", sources: [], ts: now };
+    const assistantMsg = {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      sources: [],
+      ts: now,
+      totalUsage: 0,
+    };
 
     const optimisticConv = {
       ...activeConversation,
@@ -263,7 +330,9 @@ export default function ChatPage() {
         onChunk: (chunk) => {
           updateAssistantMsg((m) => ({ ...m, content: m.content + chunk }));
         },
-        onDone: ({ threadId: newThreadId, title, sources: finalSources }) => {
+        onDone: ({ threadId: newThreadId, title, sources: finalSources, aiResponseId, totalUsage, usage }) => {
+          const finalUsageCount = totalUsage || usage?.totalUsage || 0;
+
           setConversations((prev) =>
             prev.map((c) => {
               if (c.id !== optimisticConv.id) return c;
@@ -273,14 +342,24 @@ export default function ChatPage() {
                 title: title || c.title,
                 messages: c.messages.map((m) =>
                   m.id === assistantMsgId
-                    ? { ...m, sources: finalSources || m.sources }
+                    ? {
+                        ...m,
+                        id: aiResponseId || m.id,
+                        sources: finalSources || m.sources,
+                        totalUsage: finalUsageCount,
+                      }
                     : m
                 ),
               };
             })
           );
+
+          const targetThreadId = newThreadId || activeConversation.id;
           if (newThreadId) setActiveConversationId(newThreadId);
           setIsSending(false);
+
+          // Automatically refresh usage history without page reload
+          fetchUsageHistory(targetThreadId);
         },
         onError: (err) => {
           updateAssistantMsg((m) => ({
@@ -455,6 +534,26 @@ export default function ChatPage() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {/* Usage History Dropdown Button */}
+              <button
+                onClick={() => {
+                  setIsUsageOpen(true);
+                  if (activeConversationId && activeConversationId !== "new") {
+                    fetchUsageHistory(activeConversationId);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 transition-all font-semibold text-xs shadow-sm"
+                title="View Token Usage History"
+              >
+                <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+                <span className="hidden sm:inline">Usage History</span>
+                {usageSummary?.totalUsage > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-md bg-amber-500/20 text-[10px] font-bold font-mono">
+                    {usageSummary.totalUsage.toLocaleString()}
+                  </span>
+                )}
+              </button>
+
               <KBScopeIndicator activeScope="Global Knowledge" />
             </div>
           </header>
@@ -480,6 +579,10 @@ export default function ChatPage() {
                     (m.content?.includes("couldn't find this information") ||
                       m.content?.includes("Out of Knowledge Base Scope"));
 
+                  // Match token usage record for this specific AI response
+                  const recordForMsg = usageByAiResponseId[m.id?.toString()];
+                  const msgTotalTokens = m.totalUsage || recordForMsg?.totalUsage || 0;
+
                   return (
                     <div
                       key={m.id || index}
@@ -504,7 +607,7 @@ export default function ChatPage() {
                               : "bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200/90 dark:border-slate-800 rounded-tl-sm"
                           }`}
                         >
-                          {/* AI Grounded Header */}
+                          {/* AI Grounded Header with Token Usage Badge */}
                           {!isUser && (
                             <div className="flex items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-100 dark:border-slate-800 text-xs">
                               <div className="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
@@ -512,17 +615,35 @@ export default function ChatPage() {
                                 <span>Verified Knowledge Response</span>
                               </div>
 
-                              <button
-                                onClick={() => handleCopyText(m.content, m.id)}
-                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                                title="Copy response text"
-                              >
-                                {copiedId === m.id ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-500" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5" />
-                                )}
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {/* Total Token Usage display above chat response */}
+                                {msgTotalTokens > 0 ? (
+                                  <div
+                                    className="flex items-center gap-1 font-mono text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20"
+                                    title={`Total tokens used for this response: ${msgTotalTokens}`}
+                                  >
+                                    <Zap className="w-3 h-3 text-amber-500 shrink-0" />
+                                    <span>{msgTotalTokens.toLocaleString()} tokens</span>
+                                  </div>
+                                ) : isSending && index === activeConversation.messages.length - 1 ? (
+                                  <div className="flex items-center gap-1 font-mono text-[10px] text-slate-400 animate-pulse">
+                                    <Zap className="w-3 h-3 text-amber-500/50" />
+                                    <span>Calculating tokens...</span>
+                                  </div>
+                                ) : null}
+
+                                <button
+                                  onClick={() => handleCopyText(m.content, m.id)}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                                  title="Copy response text"
+                                >
+                                  {copiedId === m.id ? (
+                                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           )}
 
@@ -607,6 +728,18 @@ export default function ChatPage() {
           doc={inspectDoc}
         />
       )}
+
+      {/* Usage History Modal / Dropdown */}
+      <UsageHistoryDropdown
+        isOpen={isUsageOpen}
+        onClose={() => setIsUsageOpen(false)}
+        records={usageRecords}
+        summary={usageSummary}
+        isLoading={isUsageLoading}
+        error={usageError}
+        onRefresh={() => fetchUsageHistory(activeConversationId)}
+        conversationTitle={activeConversation?.title || "New Chat"}
+      />
     </IsAuthenticated>
   );
 }

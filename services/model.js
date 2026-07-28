@@ -93,14 +93,16 @@ export async function generateResponse(systemPrompt, prompt, tools) {
   return result
 }
 
-export async function updateUsage(userId) {
+export async function updateUsage(userId, aiResponseId, threadId) {
   try {
-    const emb = usage.get("emb");
-    const title = usage.get("title");
-    const response = usage.get("response");
+    const emb = usage.get("emb") || 0;
+    const title = usage.get("title") || { input: 0, output: 0, total: 0 };
+    const response = usage.get("response") || { input: 0, output: 0, total: 0 };
 
-    await Usage.create({
+    const doc = await Usage.create({
       userId,
+      aiResponseId,
+      threadId,
       embeddingToken: emb,
       titleGenerationToken: {
         prompt: title.input,
@@ -116,7 +118,9 @@ export async function updateUsage(userId) {
     });
 
     resetUsage();
+    return doc;
   } catch (error) {
-    console.log(error);
+    console.error("updateUsage error:", error);
+    return null;
   }
 }

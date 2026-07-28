@@ -1,6 +1,7 @@
 import { isAuthenticated } from "@/middleware/auth";
 import Conversation from "@/models/conversation";
 import Thread from "@/models/thread";
+import Usage from "@/models/usage";
 import { NextResponse } from "next/server";
 
 export async function DELETE(req, { params }) {
@@ -27,6 +28,9 @@ export async function DELETE(req, { params }) {
                 ThreadId: threadId,
             });
 
+            await Usage.deleteMany({
+                threadId: threadId,
+            })
             return NextResponse.json(
                 { message: "Thread and history deleted successfully" },
                 { status: 200 }
