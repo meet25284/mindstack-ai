@@ -10,6 +10,7 @@ import { isAuthenticated } from "@/middleware/auth";
 import { generateBatchEmbeddings, generateResponse, generateTitle, updateUsage } from "@/services/model";
 import buildSystemPrompt from "@/services/rag/promptBuilder";
 import { hybridSearch } from "@/services/rag/hybridSearch";
+import {z} from "zod";
 
 // ---------------- POST ----------------
 
@@ -68,66 +69,53 @@ export async function POST(req) {
             });
 
             const tools = {
-                searchKnowledgeBase: tool({
-                    description: `
+                //                 re_searchKnowledgeBase: tool({
+                //                     description: `
 
-Use this tool in this case:
+                // Use this tool in this case:
 
-RETRY / TRY AGAIN: When the user says things like "try again", "regenerate", "redo that", "retry", "give me another answer", or otherwise expresses dissatisfaction WITHOUT asking a new question — do NOT search using their literal words ("try again" etc has no meaning for search). Instead:
-   - Look back in the conversation history and find the user's last real question (the one before "try again").
-   - Re-embed that ORIGINAL question and run vector search on it again.
-   - Optionally rephrase/expand the original question slightly to retrieve a different or broader set of chunks than last time.
-   - Use the newly retrieved context to generate a fresh answer, even if the context is similar to before — do not just repeat the previous answer verbatim.
+                // RETRY / TRY AGAIN: When the user says things like "try again", "regenerate", "redo that", "retry", "give me another answer", or otherwise expresses dissatisfaction WITHOUT asking a new question — do NOT search using their literal words ("try again" etc has no meaning for search). Instead:
+                //    - Look back in the conversation history and find the user's last real question (the one before "try again").
+                //    - Re-embed that ORIGINAL question and run vector search on it again.
+                //    - Optionally rephrase/expand the original question slightly to retrieve a different or broader set of chunks than last time.
+                //    - Use the newly retrieved context to generate a fresh answer, even if the context is similar to before — do not just repeat the previous answer verbatim.
 
-Never pass meta-phrases like "try again", "retry", or "regenerate" directly as the search query — always resolve them to the real underlying question first.`,
+                // Never pass meta-phrases like "try again", "retry", or "regenerate" directly as the search query — always resolve them to the real underlying question first.`,
 
-                    execute: async () => {
-                        // Generate embedding for user's last question
-                        const userEmbedding = await generateBatchEmbeddings(formattedHistory[formattedHistory.length - 3].content);
+                //                     execute: async () => {
+                //                         // Generate embedding for user's last question
+                //                         const userEmbedding = await generateBatchEmbeddings(formattedHistory[formattedHistory.length - 3].content);
 
-                        // Search similar chunks from MongoDB Vector Search
-                        const hybridResult = await hybridSearch(prompt, userEmbedding);
+                //                         // Search similar chunks from MongoDB Vector Search
+                //                         const hybridResult = await hybridSearch(prompt, userEmbedding);
+
+                //                         const context = hybridResult
+                //                             .map(chunk => chunk.content)
+                //                             .join("\n\n");
+                //                         return context
+                //                     }
+                //                 }),
+                searchKnowledge: tool({
+                    description: 'Search the knowledge base for relevant information to answer the user question. Call this whenever the user asks a factual, procedural, or knowledge-based question, or asks you to retry/search again.',
+                    inputSchema: z.object({
+                        query: z
+                            .string()
+                            .describe(
+                                'A focused, self-contained search query capturing the core information need of the user\'s question. Rephrase or expand ambiguous references (e.g. resolve "it"/"that" using conversation context) into a clear standalone query optimized for retrieval.'
+                            ),
+                    }),
+                    execute: async ({ query }) => {
+                        // Generate embedding for the AI-generated query
+                        const userEmbedding = await generateBatchEmbeddings(query);
+
+                        // Search similar chunks from MongoDB hybrid search
+                        const hybridResult = await hybridSearch(query, userEmbedding, user._id);
 
                         const context = hybridResult
                             .map(chunk => chunk.content)
                             .join("\n\n");
-                        return `You are MindStack AI, a knowledge assistant. You answer ONLY using the 
-CONTEXT provided below. You have NO other knowledge. Pretend you know nothing about 
-the world except what is written in the Context section.
 
-STRICT RULE (most important — never break this):
-- Every fact, definition, number, name, or example in your answer MUST come word-for-word 
-  traceable to the Context below.
-- If a detail is not explicitly present in the Context, you must NOT include it — even if 
-  you "know" it's true, even if it's common knowledge, even if it seems obviously correct.
-- Do not add extra explanation, examples, or definitions that are not in the Context, 
-  even to be "helpful."
-- Before answering, silently check: "Is every sentence I'm about to write backed by the 
-  Context?" If any part is not, remove that part or fall back to the not-found message.
-
-GREETINGS & SMALL TALK (exception — no context needed):
-- ONLY for pure greetings/small talk with no question (hi, hello, thanks, bye) — reply 
-  briefly and invite a question. This exception applies ONLY when there is no actual 
-  question in the message. If there's any question mixed in, treat it as a real question 
-  and apply the STRICT RULE above.
-
-SYNTHESIS RULE (limited):
-- You may combine multiple pieces from the Context to form one answer (e.g. joining 
-  scattered bullet points into a definition).
-- This is NOT permission to add outside facts, infer beyond what's written, or "complete" 
-  a partial definition using general knowledge. If the Context only has fragments and no 
-  clear full answer, say so or use the not-found message.
-
-CITATIONS:
-- Cite document name and page number in brackets when available. If not available in 
-  Context, cite the section heading. Never invent a citation.
-
-If the answer is not in the Context, respond exactly with:
-"I couldn't find this information in the knowledge base."
-
-Context:
-${context}
-`;
+                        return context;
                     }
                 })
             }
@@ -136,10 +124,6 @@ ${context}
 
             // Search similar chunks from MongoDB hybrid Search
             const hybridResult = await hybridSearch(prompt, userEmbedding, user._id);
-
-            const context = hybridResult
-                .map(chunk => chunk.content)
-                .join("\n\n");
 
             const cleanSources = Array.isArray(hybridResult)
                 ? hybridResult.map((v) => ({
@@ -150,9 +134,9 @@ ${context}
                 : [];
 
 
-            const result = await generateResponse(buildSystemPrompt(context), formattedHistory, tools)
+            const result = await generateResponse(buildSystemPrompt(), formattedHistory, tools)
             await updateUsage(user._id);
-            
+
 
             let fullResponse = "";
 
