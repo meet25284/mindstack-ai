@@ -102,6 +102,9 @@ const PaymentSchema = new Schema(
     capturedAt: { type: Date, default: null },
     failedAt: { type: Date, default: null },
 
+    // Tokens credited to user for this payment (1 paisa = 50 tokens)
+    tokensPurchased: { type: Number, default: 0, min: 0 },
+
     // Keep the full raw webhook payload for debugging / reprocessing / disputes
     rawPayload: {
       type: Schema.Types.Mixed,

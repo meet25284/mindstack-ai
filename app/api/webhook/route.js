@@ -2,6 +2,8 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import Payment from "@/models/payment";
 import User from "@/models/users";
+import Transaction from "@/models/transaction";
+import connectDB from "@/services/mongoConnect";
 
 const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
 
@@ -67,7 +69,13 @@ export async function POST(req) {
       }
 
       case "payment.captured": {
-        // Money actually captured — this is your "payment successful" source of truth
+        // Money actually captured — this is your "payment successful" source of truth.
+        // Conversion: 1 paisa = 50 tokens  →  ₹1 = 5,000 tokens
+        await connectDB();
+
+        const tokensPurchased = payment.amount * 50; // amount is in paise
+
+        // 1. Update Payment doc
         await Payment.findOneAndUpdate(
           { paymentId: payment.id },
           {
@@ -77,24 +85,42 @@ export async function POST(req) {
             currency: payment.currency,
             status: "captured",
             method: payment.method,
-            email: payment.notes.email,
+            email: payment.notes?.email,
             contact: payment.contact,
             capturedAt: new Date(),
+            tokensPurchased,
           },
           { upsert: true, new: true }
         );
 
-        await User.findOneAndUpdate(
-          { email: payment.notes.email },
+        // 2. Atomically credit tokens to user
+        const updatedUser = await User.findOneAndUpdate(
+          { email: payment.notes?.email },
           {
             isPremium: true,
             amount: payment.amount,
-            paymentId: payment.id,         
+            paymentId: payment.id,
+            $inc: {
+              tokens: tokensPurchased,
+              tokensLifetimePurchased: tokensPurchased,
+            },
           },
           { upsert: true, new: true }
         );
 
-        // TODO: fulfil order, send confirmation email, update order status, etc.
+        // 3. Log a purchase-type transaction
+        if (updatedUser) {
+          await Transaction.create({
+            userId: updatedUser._id,
+            type: "purchase",
+            tokensUsed: tokensPurchased,
+            amountDeducted: 0,
+            balanceAfter: updatedUser.tokens,
+            chatSessionId: null,
+            paymentId: payment.id,
+          });
+        }
+
         break;
       }
 

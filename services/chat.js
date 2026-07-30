@@ -1,19 +1,52 @@
-export const chat = async (promptData, { onChunk, onSources, onDone, onError }) => {
+/**
+ * services/chat.js
+ *
+ * SSE consumer for POST /api/chat.
+ *
+ * Callbacks:
+ *   onChunk(text)            — called for each streamed token chunk
+ *   onSources(sources[])     — called once with RAG citation metadata
+ *   onDone(payload)          — called on "event: end" with final metadata
+ *                              payload includes: threadId, title, sources,
+ *                              aiResponseId, totalUsage, usage,
+ *                              remainingTokens, lowBalanceWarning
+ *   onError(err)             — called on stream error or network failure
+ *   onInsufficientTokens()   — called on HTTP 402 (out of tokens)
+ */
+export const chat = async (
+    promptData,
+    { onChunk, onSources, onDone, onError, onInsufficientTokens }
+) => {
     try {
         const token = localStorage.getItem("token");
         const res = await fetch("/api/chat", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`
+                Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify(promptData),
         });
 
-        if (!res.ok || !res.body) {
-            throw new Error(`Request failed: ${res.status}`);
+        // ── 402 — Insufficient tokens ────────────────────────────────────────
+        if (res.status === 402) {
+            let errData = {};
+            try { errData = await res.json(); } catch { /* empty body */ }
+            onInsufficientTokens?.(errData);
+            return;
         }
 
+        // ── Other non-OK statuses ────────────────────────────────────────────
+        if (!res.ok || !res.body) {
+            let errMsg = `Request failed: ${res.status}`;
+            try {
+                const errData = await res.json();
+                errMsg = errData.message || errMsg;
+            } catch { /* ignore */ }
+            throw new Error(errMsg);
+        }
+
+        // ── SSE stream reading ───────────────────────────────────────────────
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -25,7 +58,7 @@ export const chat = async (promptData, { onChunk, onSources, onDone, onError }) 
             buffer += decoder.decode(value, { stream: true });
 
             const events = buffer.split("\n\n");
-            buffer = events.pop();
+            buffer = events.pop(); // keep incomplete trailing event
 
             for (const rawEvent of events) {
                 if (!rawEvent.trim()) continue;
@@ -56,7 +89,11 @@ export const chat = async (promptData, { onChunk, onSources, onDone, onError }) 
                 }
 
                 if (eventType === "end") {
+                    // parsed now includes: threadId, title, sources, aiResponseId,
+                    // totalUsage, usage, remainingTokens, lowBalanceWarning
                     onDone?.(parsed);
+                } else if (eventType === "error") {
+                    onError?.(new Error(parsed.message || "Stream error"));
                 } else if (parsed.text !== undefined) {
                     onChunk?.(parsed.text);
                 }

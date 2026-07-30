@@ -24,6 +24,17 @@ const UserSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    // Token-based billing
+    tokens: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    tokensLifetimePurchased: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
     createdAt: {
         type: Date,
         default: Date.now,

@@ -4,9 +4,19 @@ import configDotenv from "dotenv";
 
 configDotenv.config();
 
+// ── Billing constants (keep in sync with checkout page and webhook) ────────────
+// 1 paisa = 50 tokens  →  ₹1 = 100 paise = 5,000 tokens
+const TOKENS_PER_PAISA = 50;
+
+// Minimum order: ₹50 = 5,000 paise
+const MIN_AMOUNT_PAISE = 5_000;
+
+// Maximum order: ₹1,00,000 = 1,00,00,000 paise
+const MAX_AMOUNT_PAISE = 1_00_00_000;
+
 export async function POST(req) {
   try {
-    const key_id = process.env.RAZORPAY_KEY_ID
+    const key_id = process.env.RAZORPAY_KEY_ID;
     const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!key_id || !key_secret) {
@@ -23,30 +33,49 @@ export async function POST(req) {
       body = {};
     }
 
-    const amount = Number(body.amount);
+    const amount = Math.round(Number(body.amount)); // paise, integer
 
-    // Minimum amount requirement: 100 paise (₹1.00)
-    if (isNaN(amount) || amount < 100) {
+    // ── Server-side validation ─────────────────────────────────────────────
+    if (isNaN(amount) || amount < MIN_AMOUNT_PAISE) {
       return NextResponse.json(
-        { message: "Amount is required and must be at least 100 paise" },
+        {
+          message: `Minimum purchase is ₹${MIN_AMOUNT_PAISE / 100} (${MIN_AMOUNT_PAISE} paise).`,
+        },
         { status: 400 }
       );
     }
 
+    if (amount > MAX_AMOUNT_PAISE) {
+      return NextResponse.json(
+        {
+          message: `Maximum single purchase is ₹${(MAX_AMOUNT_PAISE / 100).toLocaleString("en-IN")}.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // ── Recompute tokens server-side (never trust client value) ───────────
+    // amount is in paise; 1 paisa = TOKENS_PER_PAISA tokens
+    const tokensPurchased = amount * TOKENS_PER_PAISA;
+
     const currency = body.currency || "INR";
     const receipt = body.receipt || `receipt_${Date.now()}`;
 
-    const razorpay = new Razorpay({
-      key_id,
-      key_secret,
-    });
+    // Merge caller notes with the server-verified token count.
+    // The webhook will use payment.amount (from Razorpay) to recompute tokens —
+    // tokensPurchased here is for logging/display only in the Razorpay dashboard.
+    const notes = {
+      ...(body.notes || {}),
+      tokens_verified: tokensPurchased,
+    };
 
-      console.log("🚀 ~ POST ~ body.notes:", body.notes)
+    const razorpay = new Razorpay({ key_id, key_secret });
+
     const order = await razorpay.orders.create({
-      amount: Math.round(amount),
+      amount,
       currency,
       receipt,
-      notes: body.notes || {},
+      notes,
     });
 
     return NextResponse.json(
@@ -54,7 +83,8 @@ export async function POST(req) {
         order_id: order.id,
         amount: order.amount,
         currency: order.currency,
-        key_id: key_id,
+        key_id,
+        tokens_purchased: tokensPurchased, // informational — shown in UI
       },
       { status: 200 }
     );

@@ -15,13 +15,14 @@ import {
   Upload,
   Database,
   ShieldCheck,
-  BookOpen,
   Copy,
   Check,
   FolderOpen,
-  Sparkles,
   Zap,
   DollarSign,
+  LayoutDashboard,
+  AlertTriangle,
+  CreditCard,
 } from "lucide-react";
 import { Streamdown } from "streamdown";
 import "streamdown/styles.css";
@@ -31,6 +32,7 @@ import SourceCitationPanel from "@/components/SourceCitationPanel";
 import GroundedEmptyState from "@/components/GroundedEmptyState";
 import FileViewerModal from "@/components/FileViewerModal";
 import UsageHistoryDropdown from "@/components/UsageHistoryDropdown";
+import Toast from "@/components/Toast";
 
 /* ─── Auth Guard ─────────────────────────────────────────────────── */
 function IsAuthenticated({ children }) {
@@ -85,6 +87,16 @@ export default function ChatPage() {
   const [usageSummary, setUsageSummary] = useState(null);
   const [isUsageLoading, setIsUsageLoading] = useState(false);
   const [usageError, setUsageError] = useState(null);
+
+  // ── Token billing state ────────────────────────────────────────────────────
+  // remainingTokens: live balance from the last API response
+  const [remainingTokens, setRemainingTokens] = useState(null);
+  // isInsufficientTokens: true when API returns 402
+  const [isInsufficientTokens, setIsInsufficientTokens] = useState(false);
+  // Toast notification
+  const [toast, setToast] = useState(null);
+  // Guard: only show low-balance warning once per threshold-crossing per session
+  const lowBalanceShownRef = useRef(false);
 
   const activeConversation = useMemo(() => {
     const fromId = conversations.find((c) => c.id === activeConversationId);
@@ -331,8 +343,32 @@ export default function ChatPage() {
         onChunk: (chunk) => {
           updateAssistantMsg((m) => ({ ...m, content: m.content + chunk }));
         },
-        onDone: ({ threadId: newThreadId, title, sources: finalSources, aiResponseId, totalUsage, usage }) => {
+        onDone: ({
+          threadId: newThreadId,
+          title,
+          sources: finalSources,
+          aiResponseId,
+          totalUsage,
+          usage,
+          remainingTokens: newBalance,
+          lowBalanceWarning,
+        }) => {
           const finalUsageCount = totalUsage || usage?.totalUsage || 0;
+
+          // Update live token balance
+          if (typeof newBalance === "number") {
+            setRemainingTokens(newBalance);
+          }
+
+          // Show low-balance warning toast — only once per threshold-crossing
+          if (lowBalanceWarning && !lowBalanceShownRef.current) {
+            lowBalanceShownRef.current = true;
+            setToast({
+              type: "warning",
+              message:
+                "⚠️ Only ₹10 or less credit remaining. Please recharge to continue chatting.",
+            });
+          }
 
           setConversations((prev) =>
             prev.map((c) => {
@@ -368,6 +404,23 @@ export default function ChatPage() {
             content: `\n⚠️ Grounding Error: ${err.message || "Failed to retrieve context from knowledge base."}`,
           }));
           setIsSending(false);
+        },
+        onInsufficientTokens: () => {
+          // 402 — block input and show recharge CTA
+          setIsInsufficientTokens(true);
+          setIsSending(false);
+          // Remove the optimistic assistant message
+          setConversations((prev) =>
+            prev.map((c) => {
+              if (c.id !== optimisticConv.id) return c;
+              return {
+                ...c,
+                messages: c.messages.filter(
+                  (m) => m.id !== assistantMsgId && m.id !== userMsg.id
+                ),
+              };
+            })
+          );
         },
       }
     );
@@ -493,6 +546,25 @@ export default function ChatPage() {
 
             {/* Sidebar Navigation Footer */}
             <div className="p-3 border-t border-slate-200 dark:border-slate-800/80 space-y-1.5 bg-slate-100/50 dark:bg-[#090d16]/50">
+              {/* Live token balance display */}
+              {remainingTokens !== null && (
+                <div
+                  className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold border ${
+                    remainingTokens < 50_000
+                      ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
+                      : "bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 shrink-0" />
+                    <span>Tokens</span>
+                  </div>
+                  <span className="font-mono">
+                    {remainingTokens.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
               <Link
                 href="/knowledge"
                 className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-xl transition-all"
@@ -504,15 +576,22 @@ export default function ChatPage() {
                 href="/upload"
                 className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-xl transition-all"
               >
-                <Upload className="w-4 h-4 text-emerald-500 shrink-0" />
+                <FolderOpen className="w-4 h-4 text-emerald-500 shrink-0" />
                 <span>Upload Documents</span>
+              </Link>
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-xl transition-all"
+              >
+                <LayoutDashboard className="w-4 h-4 text-purple-500 shrink-0" />
+                <span>Dashboard</span>
               </Link>
               <Link
                 href="/checkout"
                 className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800/60 rounded-xl transition-all"
               >
                 <DollarSign className="w-4 h-4 text-emerald-500 shrink-0" />
-                <span>Buy creadits</span>
+                <span>Buy Tokens</span>
               </Link>
             </div>
           </div>
@@ -687,6 +766,27 @@ export default function ChatPage() {
           {/* Static Bottom Query Input Bar */}
           <div className="shrink-0 px-4 sm:px-8 py-4 border-t border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#090d16]/90 backdrop-blur-md">
             <div className="max-w-3xl mx-auto space-y-2">
+
+              {/* ── Insufficient Token CTA ────────────────────────────────── */}
+              {isInsufficientTokens && (
+                <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-rose-950/80 border border-rose-700/50 text-rose-100">
+                  <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold">Out of tokens</p>
+                    <p className="text-xs text-rose-300 mt-0.5">
+                      Your token balance is empty. Recharge to continue chatting.
+                    </p>
+                  </div>
+                  <Link
+                    href="/checkout"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs transition-all shrink-0 shadow-md"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Recharge now</span>
+                  </Link>
+                </div>
+              )}
+
               <div className="relative group">
                 <div className="absolute -inset-px rounded-3xl bg-gradient-to-r from-indigo-500 to-purple-500 blur-sm opacity-0 group-focus-within:opacity-100 transition duration-300 pointer-events-none" />
 
@@ -698,14 +798,18 @@ export default function ChatPage() {
                     onKeyDown={onKeyDown}
                     rows={1}
                     maxLength={4000}
-                    disabled={isSending || isLoading}
-                    placeholder="Ask a question strictly answered from your knowledge base..."
-                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none text-slate-900 dark:text-slate-100 text-sm placeholder-slate-400 outline-none leading-relaxed min-h-[44px] max-h-[140px]"
+                    disabled={isSending || isLoading || isInsufficientTokens}
+                    placeholder={
+                      isInsufficientTokens
+                        ? "Recharge your tokens to continue chatting..."
+                        : "Ask a question strictly answered from your knowledge base..."
+                    }
+                    className="flex-1 bg-transparent border-0 focus:ring-0 resize-none text-slate-900 dark:text-slate-100 text-sm placeholder-slate-400 outline-none leading-relaxed min-h-[44px] max-h-[140px] disabled:opacity-50 disabled:cursor-not-allowed"
                   />
 
                   <button
                     onClick={() => sendMessage()}
-                    disabled={isSending || isLoading || !draft.trim() || draft.length > 4000}
+                    disabled={isSending || isLoading || !draft.trim() || draft.length > 4000 || isInsufficientTokens}
                     className="p-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 shadow-md shadow-indigo-600/20 transition-all shrink-0"
                     title="Send query"
                   >
@@ -720,9 +824,21 @@ export default function ChatPage() {
 
               <div className="flex items-center justify-between text-[11px] text-slate-400 px-2">
                 <span>Press Enter to send query</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                  ✓ Strict Vector Grounding Enabled
-                </span>
+                {remainingTokens !== null ? (
+                  <span
+                    className={`font-mono font-bold ${
+                      remainingTokens < 50_000
+                        ? "text-amber-500"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    ⚡ {remainingTokens.toLocaleString()} tokens remaining
+                  </span>
+                ) : (
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    ✓ Strict Vector Grounding Enabled
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -749,6 +865,9 @@ export default function ChatPage() {
         onRefresh={() => fetchUsageHistory(activeConversationId)}
         conversationTitle={activeConversation?.title || "New Chat"}
       />
+
+      {/* Low-balance / general toast notification */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </IsAuthenticated>
   );
 }
