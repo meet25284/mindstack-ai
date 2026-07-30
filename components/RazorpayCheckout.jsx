@@ -238,12 +238,6 @@ export default function RazorpayCheckout({
           )}
           <div className="flex-1">
             <p className="font-medium">{status.text}</p>
-            {status.details && (
-              <div className="mt-2 text-xs font-mono space-y-1 opacity-90 border-t border-emerald-200/60 dark:border-emerald-800/60 pt-2">
-                <div>Payment ID: {status.details.paymentId}</div>
-                <div>Order ID: {status.details.orderId}</div>
-              </div>
-            )}
           </div>
         </div>
       )}
