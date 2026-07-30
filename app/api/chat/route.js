@@ -2,8 +2,7 @@
 
 import Thread from "@/models/thread";
 
-import { openai } from "@ai-sdk/openai";
-import { generateText, stepCountIs, streamText, tool } from "ai";
+import { tool } from "ai";
 import Conversation from "@/models/conversation";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/middleware/auth";
@@ -11,6 +10,7 @@ import { generateBatchEmbeddings, generateResponse, generateTitle, updateUsage }
 import buildSystemPrompt from "@/services/rag/promptBuilder";
 import { hybridSearch } from "@/services/rag/hybridSearch";
 import { z } from "zod";
+
 
 // ---------------- POST ----------------
 
@@ -20,6 +20,14 @@ export async function POST(req) {
         const user = await isAuthenticated(req)
         if (user.status !== (401 || 404)) {
             const { prompt, threadId: incomingThreadId } = await req.json();
+
+            if (user.isPremium == false) {
+                return NextResponse.json(
+                    { message: "you have reached your credit limits buy new credits" },
+                    { status: 400 }
+                );
+
+            }
 
             let threadId = incomingThreadId;
 
@@ -69,32 +77,6 @@ export async function POST(req) {
             });
 
             const tools = {
-                //                 re_searchKnowledgeBase: tool({
-                //                     description: `
-
-                // Use this tool in this case:
-
-                // RETRY / TRY AGAIN: When the user says things like "try again", "regenerate", "redo that", "retry", "give me another answer", or otherwise expresses dissatisfaction WITHOUT asking a new question — do NOT search using their literal words ("try again" etc has no meaning for search). Instead:
-                //    - Look back in the conversation history and find the user's last real question (the one before "try again").
-                //    - Re-embed that ORIGINAL question and run vector search on it again.
-                //    - Optionally rephrase/expand the original question slightly to retrieve a different or broader set of chunks than last time.
-                //    - Use the newly retrieved context to generate a fresh answer, even if the context is similar to before — do not just repeat the previous answer verbatim.
-
-                // Never pass meta-phrases like "try again", "retry", or "regenerate" directly as the search query — always resolve them to the real underlying question first.`,
-
-                //                     execute: async () => {
-                //                         // Generate embedding for user's last question
-                //                         const userEmbedding = await generateBatchEmbeddings(formattedHistory[formattedHistory.length - 3].content);
-
-                //                         // Search similar chunks from MongoDB Vector Search
-                //                         const hybridResult = await hybridSearch(prompt, userEmbedding);
-
-                //                         const context = hybridResult
-                //                             .map(chunk => chunk.content)
-                //                             .join("\n\n");
-                //                         return context
-                //                     }
-                //                 }),
                 searchKnowledge: tool({
                     description: 'Search the knowledge base for relevant information to answer the user question. Call this whenever the user asks a factual, procedural, or knowledge-based question, or asks you to retry/search again.',
                     inputSchema: z.object({

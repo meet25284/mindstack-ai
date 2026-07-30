@@ -14,6 +14,16 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    paymentId:{
+        type: String,
+    },
+    amount:{
+        type: Number,
+    },
+    isPremium:{
+        type: Boolean,
+        default: false
+    },
     createdAt: {
         type: Date,
         default: Date.now,

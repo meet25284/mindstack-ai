@@ -1,10 +1,11 @@
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 dotenv.config();
-import jwt from "jsonwebtoken";
 import { getVerificationEmailTemplate } from "@/templetes/verification_email_templete";
 import { getWelcomeEmailTemplate } from "@/templetes/welcome_email_templete";
 import { getOTPEmailTemplate } from "@/templetes/otp_email_templete";
+import User from "@/models/users";
+import { createToken } from "./jwt";
 
 export const transporter = nodemailer.createTransport({
     host: 'smtp.ethereal.email',
@@ -64,12 +65,13 @@ export const verifyOTP = (email, otp) => {
 };
 
 export const verifyEmail = async (email) => {
-    const verificationToken = jwt.sign({email}, process.env.JWT_SECRET, { expiresIn: "2m" });
+    const user = await User.findOne({email: email});
+    const verificationToken = createToken(user._id)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const verificationLink = `${baseUrl}/api/verify-email/${verificationToken}`;
     
     await sendEmail(
-        email,
+        user.email,
         "Verify Your Email",
         getVerificationEmailTemplate(verificationLink)
     );
