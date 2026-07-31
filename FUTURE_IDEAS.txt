@@ -1,0 +1,174 @@
+FUTURE_IDEAS.txt — MindStack AI
+=================================
+Ideas grounded in the actual codebase. Nothing here is invented.
+
+
+FEATURES
+--------
+- Selective knowledge base scoping per chat thread
+  The RAG pipeline currently searches ALL documents for a user. Allow users to
+  pin specific documents or collections to a thread so the model only searches
+  a chosen subset.
+
+- Folder / collection organisation for knowledge base
+  Users can only see a flat list of documents. Add folder or tag support so
+  documents can be grouped (e.g. "Work", "Research", "Client X").
+
+- Document re-processing / re-embedding
+  If a document fails processing (FAILED status), there is no UI to retry.
+  Add a "Re-process" button that re-triggers the embedding pipeline without
+  re-uploading to Cloudinary.
+
+- Multi-file upload
+  The upload page handles one file at a time. Support batch upload with
+  per-file progress indicators.
+
+- Supported file types: CSV, HTML, EPUB
+  textconverter.js only handles PDF, DOCX, TXT, and Markdown. Adding CSV
+  (tabular data) and HTML (web page exports) would significantly broaden
+  the use case.
+
+- Chat message editing and regeneration
+  Users cannot edit a sent message to get a revised AI response. Add edit +
+  regenerate functionality to each user message.
+
+- Conversation export
+  Allow users to export a chat thread as Markdown or PDF.
+
+- Token top-up auto-refill
+  Let users set a threshold at which tokens are automatically topped up by a
+  fixed amount (requires Razorpay recurring payment or stored card support).
+
+- Admin panel
+  No internal admin tooling exists. A basic panel showing user counts, total
+  token consumption, payment revenue, and failed document counts would be
+  useful.
+
+- Public knowledge base sharing
+  Allow users to optionally share a knowledge base publicly and embed it on
+  external sites (iframe or JS widget).
+
+
+TECHNICAL DEBT
+--------------
+- No automated test suite
+  The model service has a NODE_ENV==="test" guard and mocked title generation,
+  but there are no actual tests. Add unit tests for:
+    * RAG pipeline (hybridSearch, rerank, vectorSearch, bm25Search)
+    * API route handlers (register, chat, upload, webhook)
+    * Zod validation schemas
+    * textconverter chunking logic
+
+- OTP stored in a module-level Map (in-process memory)
+  services/mail.js stores OTPs in a JavaScript Map. This breaks in multi-
+  process or serverless deployments (each cold start has an empty map) and
+  has no expiry. Replace with short-TTL Redis entries or signed JWT OTPs.
+
+- No rate limiting on API routes
+  The chat, upload, and auth endpoints have no rate limiting. A user or bot
+  could exhaust OpenAI quota or hammer the registration endpoint. Add
+  in-memory or Redis-backed rate limiting (e.g. upstash/ratelimit).
+
+- Chunking strategy is naive character-based splitting
+  textconverter.js slices text every 500 characters with 100-char overlap.
+  This can split sentences mid-word and degrades embedding quality. Replace
+  with sentence-aware or paragraph-aware splitting.
+
+- No vector index existence check at startup
+  If the Atlas vector_index is not yet "Active", vector search silently
+  returns empty results with no warning. Add a startup health check that
+  verifies both Atlas indexes exist and are active.
+
+- Missing input sanitisation on chat endpoint
+  The chat route accepts raw user messages and injects them directly into the
+  AI prompt. While the system prompt has a prompt-injection guard, server-side
+  length limits and basic sanitisation should also be enforced.
+
+- Error messages leak internal details in some routes
+  Several catch blocks return err.message directly to the client, which can
+  expose internal paths or schema details. Normalise error responses.
+
+- No pagination on knowledge base listing
+  The /api/knowledge route returns all documents for a user in one query.
+  Add cursor or offset pagination for users with large libraries.
+
+- Cloudinary credentials not confirmed in .env.example
+  The .env.example file lists MONGODB_URI, JWT_SECRET, OPENAI_API_KEY, and
+  Razorpay keys, but does not list CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY,
+  or CLOUDINARY_API_SECRET, even though the upload pipeline requires them.
+  Update .env.example to be complete.
+
+- models/users.js manages createdAt/updatedAt manually
+  The user schema sets createdAt/updatedAt as plain fields with Date.now
+  defaults. Unlike File/Payment models which use Mongoose `timestamps: true`,
+  updatedAt on User is never auto-updated on save. Add `timestamps: true`.
+
+
+DEVOPS
+------
+- No Dockerfile or docker-compose.yml
+  There is no containerisation. Add a multi-stage Dockerfile and a
+  docker-compose that spins up the Next.js app alongside a local
+  MongoDB instance for development.
+
+- No CI/CD pipeline
+  No .github/workflows or equivalent CI config exists. Add a GitHub Actions
+  workflow that runs `npm run lint` and `npm run build` on every push and PR.
+
+- No environment variable validation at startup
+  If a required env var (e.g. OPENAI_API_KEY) is missing, the app starts and
+  fails silently at runtime. Add a startup check using Zod (already a
+  dependency) to validate all required env vars and exit early with a clear
+  error message.
+
+- No production deployment documentation
+  INSTALL.md covers local dev. Document a reference deployment to Vercel
+  (natural for Next.js), including how to set env vars, configure Razorpay
+  webhook URLs for production, and point to the production MongoDB Atlas
+  cluster.
+
+- No health-check endpoint
+  Add a /api/health route that checks MongoDB connectivity and returns a
+  simple 200 OK. Useful for uptime monitors and container orchestration.
+
+
+NICE TO HAVE
+------------
+- Dark / light mode toggle
+  The UI uses dark-mode Tailwind classes exclusively. Add a proper theme
+  toggle that persists to localStorage.
+
+- Real-time upload progress
+  The upload UI sends a single POST and waits. Add chunked upload with
+  server-sent progress events so users see embedding progress in real time.
+
+- AI token usage transparency
+  The dashboard shows token balance and purchase history, but does not show
+  token cost per individual chat message. Add a per-message cost tooltip
+  (the Usage model already tracks this data per AI response).
+
+- Streaming title generation
+  Conversation titles are generated with a separate non-streaming generateText
+  call after the main stream completes. Consider generating the title
+  speculatively during the stream to reduce perceived latency.
+
+- Webhook event replay
+  The Payment model stores rawPayload and webhookLogs. Add an admin route
+  that can replay a stored webhook payload for debugging failed payment
+  captures.
+
+- Google / GitHub OAuth
+  Currently only email+password and OTP login are supported. Adding OAuth
+  (Passport.js or NextAuth.js) would reduce friction for new users.
+
+- Stripe as an alternative payment provider
+  Razorpay is INR-only. Adding Stripe would open the platform to
+  international users.
+
+- Analytics integration
+  No analytics are tracked. Add lightweight, privacy-respecting analytics
+  (e.g. Plausible, PostHog) to understand which features are used most.
+
+- Knowledge base import from URL
+  Allow users to paste a URL and have the app fetch, parse, and index the
+  page content automatically, similar to a web clipper.
