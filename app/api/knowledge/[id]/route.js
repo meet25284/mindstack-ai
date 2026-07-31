@@ -1,3 +1,14 @@
+/**
+ * app/api/knowledge/[id]/route.js
+ *
+ * GET  /api/knowledge/:id  — Fetch document metadata + extracted text content
+ * DELETE /api/knowledge/:id — Soft-delete a document and its embeddings
+ *
+ * The GET handler is called by FileViewerModal to load the "Extracted Content"
+ * tab text and to determine whether to show the PDF preview tab (via fileType).
+ * It must return correct metadata for both Cloudinary and legacy local-disk docs.
+ */
+
 import { NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
@@ -7,6 +18,50 @@ import connectDB from "@/services/mongoConnect";
 import { db } from "@/lib/mongodb";
 import { isAuthenticated } from "@/middleware/auth";
 import { deleteKnowledge } from "@/lib/deleteKnowledge";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Derive a normalised file extension label ("pdf", "docx", "txt", "md")
+ * from either a MIME type string or a file path extension.
+ *
+ * This value drives `doc.fileType` on the frontend — the FileViewerModal uses
+ * `doc.fileType === "pdf"` to decide whether to show the PDF preview tab.
+ *
+ * @param {string} mimeType   e.g. "application/pdf"
+ * @param {string} filePath   e.g. "/uploads/1234-notes.pdf"
+ * @returns {string}          e.g. "pdf"
+ */
+function resolveFileType(mimeType, filePath) {
+  if (mimeType) {
+    if (mimeType === "application/pdf") return "pdf";
+    if (
+      mimeType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+      return "docx";
+    if (mimeType === "text/plain") return "txt";
+    if (mimeType === "text/markdown") return "md";
+    // Generic fallback: use the subtype portion
+    return mimeType.split("/").pop().toLowerCase();
+  }
+  // Legacy path-based fallback
+  return path.extname(filePath || "").replace(".", "").toLowerCase() || "txt";
+}
+
+/**
+ * Derive the display filename.
+ *
+ * @param {object} doc  Mongoose File document
+ * @returns {string}
+ */
+function resolveFileName(doc) {
+  if (doc.originalFileName) return doc.originalFileName;
+  if (doc.path) return path.basename(doc.path);
+  return doc.title || "file";
+}
+
+// ─── DELETE handler ───────────────────────────────────────────────────────────
 
 export async function DELETE(request, { params }) {
   try {
@@ -37,13 +92,21 @@ export async function DELETE(request, { params }) {
   }
 }
 
-export async function GET(request, { params }) {
-  try {
-    const user = await isAuthenticated(request);
-    if (!user || user.status === 401 || user.status === 404) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+// ─── GET handler ─────────────────────────────────────────────────────────────
 
+export async function GET(request, { params }) {
+  // ── Authentication ───────────────────────────────────────────────────────────
+  let user;
+  try {
+    user = await isAuthenticated(request);
+  } catch (_) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  if (!user || user.status === 401 || user.status === 404) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
     const { id } = await params;
     if (!id) {
       return NextResponse.json({ message: "Missing document ID" }, { status: 400 });
@@ -55,19 +118,24 @@ export async function GET(request, { params }) {
       return NextResponse.json({ message: "Document not found" }, { status: 404 });
     }
 
-    const storedPath = doc.path || "";
-    const basename = storedPath ? path.basename(storedPath) : doc.title;
-    const ext = path.extname(storedPath).replace(".", "").toLowerCase() || "txt";
+    // ── Resolve display metadata ─────────────────────────────────────────────
+    const fileName = resolveFileName(doc);
 
+    // fileType MUST correctly reflect the actual file format.
+    // FileViewerModal checks: doc.fileType === "pdf" to show the PDF preview tab.
+    const fileType = resolveFileType(doc.mimeType, doc.path);
+
+    // ── Extract text content ─────────────────────────────────────────────────
     let content = "";
     let readFromFile = false;
 
-    // Try reading directly from file system first
-    if (storedPath) {
+    // For legacy local-disk TXT/MD/DOCX documents: read directly from filesystem
+    if (doc.path && !doc.cloudinaryUrl) {
+      const ext = path.extname(doc.path).replace(".", "").toLowerCase();
       try {
-        let absolutePath = storedPath;
+        let absolutePath = doc.path;
         if (!path.isAbsolute(absolutePath)) {
-          absolutePath = path.join(process.cwd(), storedPath);
+          absolutePath = path.join(process.cwd(), absolutePath);
         }
 
         if (ext === "txt" || ext === "md") {
@@ -80,17 +148,21 @@ export async function GET(request, { params }) {
           content = result.value;
           readFromFile = true;
         }
+        // PDF: always fall through to vector-chunk aggregation below
       } catch (err) {
-        console.warn(`Could not read file from disk for ${storedPath}:`, err.message);
+        console.warn(`[knowledge/[id]] Could not read local file ${doc.path}:`, err.message);
       }
     }
 
-    // Fallback or PDF: aggregate text chunks from vector collection
+    // For PDFs (both Cloudinary and legacy) and any file we couldn't read
+    // from disk: reconstruct text from stored vector chunks.
+    // This works because we always extract and store the full text as chunks
+    // during the upload pipeline — the chunks ARE the text.
     if (!readFromFile) {
       let objId = null;
       try {
         objId = new ObjectId(id);
-      } catch (e) {}
+      } catch (_) { /* invalid ObjectId — skip */ }
 
       const matchConditions = [
         { knowledgeId: id },
@@ -115,11 +187,18 @@ export async function GET(request, { params }) {
       document: {
         id: doc._id.toString(),
         title: doc.title,
-        fileName: basename,
-        filePath: storedPath,
-        fileType: ext,
+        originalFileName: doc.originalFileName || fileName,
+        fileName,
+        // fileType is the critical field: "pdf", "docx", "txt", or "md"
+        fileType,
+        mimeType: doc.mimeType || null,
+        cloudinaryUrl: doc.cloudinaryUrl || null,
+        publicId: doc.publicId || null,
+        // Legacy field — kept for backward compat
+        filePath: doc.path || null,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
+        processingStatus: doc.processingStatus || "READY",
       },
       content,
     });

@@ -18,9 +18,26 @@ import {
 } from "lucide-react";
 import { knowledgeService } from "@/services/knowledgeService";
 
+/**
+ * FileViewerModal
+ *
+ * PDF VIEWING STRATEGY (post-Cloudinary migration):
+ *
+ * OLD approach: fetch binary → createObjectURL → iframe src=blob:
+ *   Problem: createObjectURL race conditions, blob revocation issues,
+ *   and cross-origin fetch limitations with Cloudinary URLs.
+ *
+ * NEW approach: iframe src = /api/knowledge/:id/file?token=...
+ *   The file proxy endpoint:
+ *     - Is same-origin (no CORS issues)
+ *     - Accepts ?token= for auth (no custom headers needed — iframes can't send them)
+ *     - Returns Content-Type: application/pdf so the browser's native PDF viewer handles rendering
+ *     - Buffers the file from Cloudinary server-side (no cross-origin fetch on the client)
+ *
+ *   This gives full native PDF viewer support: scroll, zoom, page nav, download.
+ */
 export default function FileViewerModal({ isOpen, onClose, doc }) {
   const [content, setContent] = useState("");
-  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("preview"); // "preview" or "text"
   const [error, setError] = useState(null);
@@ -30,50 +47,38 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
 
   const containerRef = useRef(null);
 
+  // Determine file type from doc metadata
+  const isPdf = doc?.fileType?.toLowerCase() === "pdf";
+
+  // Build the proxy URL once — iframe uses this directly (no blob URL needed).
+  // Auth token is passed as a query param because <iframe> cannot send
+  // custom request headers like "Authorization: Bearer ...".
+  const pdfProxyUrl = (() => {
+    if (!doc?.id || !isPdf) return null;
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("token") || ""
+        : "";
+    return `/api/knowledge/${doc.id}/file?token=${encodeURIComponent(token)}`;
+  })();
+
   useEffect(() => {
     if (!isOpen || !doc) return;
 
-    let createdUrl = null;
-    const ext = doc.fileType?.toLowerCase();
-    const isPdfFile = ext === "pdf";
-
-    if (isPdfFile) {
-      setActiveTab("preview");
-    } else {
-      setActiveTab("text");
-    }
+    // Open PDF tab by default for PDF files, text tab for everything else
+    setActiveTab(isPdf ? "preview" : "text");
 
     const loadData = async () => {
       setIsLoading(true);
       setError(null);
       setContent("");
-      setPdfBlobUrl(null);
 
       try {
-        // 1. Fetch text content
+        // Always load the extracted text content (used in the "Extracted Content" tab)
         const textRes = await knowledgeService.getDocumentContent(doc.id);
         setContent(textRes.content || "No extracted text available.");
-
-        // 2. If PDF, fetch binary blob for native PDF iframe preview
-        if (isPdfFile) {
-          const token = localStorage.getItem("token") || "";
-          const fileRes = await fetch(`/api/knowledge/${doc.id}/file`, {
-            headers: {
-              Authorization: token ? `Bearer ${token}` : "",
-            },
-          });
-
-          if (fileRes.ok) {
-            const blob = await fileRes.blob();
-            createdUrl = URL.createObjectURL(blob);
-            setPdfBlobUrl(createdUrl);
-          } else {
-            // Fall back to text tab if PDF file binary missing
-            setActiveTab("text");
-          }
-        }
       } catch (err) {
-        console.error("Error loading document:", err);
+        console.error("Error loading document content:", err);
         setError(err.message || "Failed to load document content.");
       } finally {
         setIsLoading(false);
@@ -81,17 +86,9 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
     };
 
     loadData();
-
-    return () => {
-      if (createdUrl) {
-        URL.revokeObjectURL(createdUrl);
-      }
-    };
   }, [isOpen, doc]);
 
   if (!isOpen || !doc) return null;
-
-  const isPdf = doc.fileType?.toLowerCase() === "pdf";
 
   const handleCopyText = () => {
     if (!content) return;
@@ -124,7 +121,7 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
                 {doc.title || doc.fileName}
               </h3>
               <p className="text-xs text-slate-400 flex items-center gap-2 truncate">
-                <span className="uppercase font-bold text-[10px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                <span className="uppercase font-bold text-[10px] text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded border border-blue-500/20">
                   {doc.fileType || "DOC"}
                 </span>
                 <span className="truncate">{doc.fileName}</span>
@@ -138,7 +135,7 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
           <div className="flex items-center gap-2 shrink-0">
             {/* View Mode Switcher Tabs */}
             <div className="bg-slate-950 p-1 rounded-2xl border border-slate-800 flex items-center gap-1 text-xs">
-              {isPdf && pdfBlobUrl && (
+              {isPdf && pdfProxyUrl && (
                 <button
                   onClick={() => setActiveTab("preview")}
                   className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-semibold transition-all ${activeTab === "preview"
@@ -162,7 +159,7 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
               </button>
             </div>
 
-            {/* Copy Button (for text mode) */}
+            {/* Copy Button (text mode) */}
             {activeTab === "text" && content && (
               <button
                 onClick={handleCopyText}
@@ -171,6 +168,18 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
               </button>
+            )}
+
+            {/* Download button (PDF only) */}
+            {isPdf && pdfProxyUrl && (
+              <a
+                href={`${pdfProxyUrl}&dl=1`}
+                download={doc.fileName || doc.title}
+                className="p-2 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors hidden sm:flex"
+                title="Download PDF"
+              >
+                <Download className="w-4 h-4" />
+              </a>
             )}
 
             {/* Fullscreen Toggle */}
@@ -193,7 +202,7 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
           </div>
         </div>
 
-        {/* Modal Body Container */}
+        {/* Modal Body */}
         <div className="flex-1 bg-slate-950 relative overflow-hidden flex flex-col">
           {isLoading ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 space-y-3">
@@ -207,16 +216,26 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
               </div>
               <p className="text-sm text-rose-400 font-semibold">{error}</p>
             </div>
-          ) : activeTab === "preview" && isPdf && pdfBlobUrl ? (
+          ) : activeTab === "preview" && isPdf && pdfProxyUrl ? (
+            /*
+             * PDF VIEWER
+             *
+             * The iframe src points directly at our authenticated proxy endpoint.
+             * The token is embedded as a ?token= query param (auth middleware reads it).
+             * #toolbar=1 enables the browser's native PDF toolbar (Chrome/Firefox/Safari).
+             *
+             * This gives the user: zoom, scroll, page navigation, text selection,
+             * and the browser's own download button — all natively.
+             */
             <div className="flex-1 w-full h-full bg-slate-950 flex flex-col">
               <iframe
-                src={`${pdfBlobUrl}#toolbar=1`}
+                src={`${pdfProxyUrl}#toolbar=1`}
                 className="w-full h-full border-0"
                 title={doc.title || doc.fileName}
               />
             </div>
           ) : (
-            /* Extracted Text Content Container */
+            /* Extracted Text Content */
             <div className="flex-1 overflow-y-auto p-6 sm:p-8 font-mono text-sm leading-relaxed text-slate-200 select-text selection:bg-blue-600 selection:text-white bg-slate-950">
               <div
                 style={{ fontSize: `${(zoomLevel / 100) * 14}px` }}
@@ -228,7 +247,7 @@ export default function FileViewerModal({ isOpen, onClose, doc }) {
           )}
         </div>
 
-        {/* Footer info bar */}
+        {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-800/80 bg-slate-900/90 text-xs text-slate-400 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <span>Document ID: <code className="text-slate-300 font-mono text-[11px]">{doc.id}</code></span>
