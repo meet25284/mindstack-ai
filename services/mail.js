@@ -8,8 +8,7 @@ import User from "@/models/users";
 import { createToken } from "./jwt";
 
 export const transporter = nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
+    service: "gmail",
     auth: {
         user: process.env.email,
         pass: process.env.password
@@ -25,7 +24,7 @@ export const sendEmail = async (
         return;
     }
     await transporter.sendMail({
-        from: process.env.gmail,
+        from: process.env.email,
         to,
         subject,
         html,
