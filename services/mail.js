@@ -67,7 +67,7 @@ export const verifyEmail = async (email) => {
     const user = await User.findOne({email: email});
     const verificationToken = createToken(user._id)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const verificationLink = `${baseUrl}/api/verify-email/${verificationToken}`;
+    const verificationLink = `${baseUrl}/verify-email/${verificationToken}`;
     
     await sendEmail(
         user.email,

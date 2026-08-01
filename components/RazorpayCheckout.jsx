@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Zap,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const loadScript = (src) => {
   return new Promise((resolve) => {
@@ -46,7 +47,7 @@ export default function RazorpayCheckout({
 }) {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null); // { type: 'success'|'error'|'warning', text, details? }
-
+  const router = useRouter()
   const handleCheckout = async () => {
     setLoading(true);
     setStatus(null);
@@ -137,6 +138,9 @@ export default function RazorpayCheckout({
                 },
               });
               onPaymentSuccess?.(verifyData);
+              setTimeout(() => {
+                router.push("/dashboard")
+              }, 3000)
             } else {
               setStatus({ type: 'error', text: verifyData.message || 'Payment signature verification failed.' });
             }
@@ -155,7 +159,6 @@ export default function RazorpayCheckout({
         prefill: { email },
         theme: { color: '#6366f1' },
       };
-      console.log("🚀 ~ handleCheckout ~ options:", options)
 
       const rzp = new window.Razorpay(options);
       rzp.open();

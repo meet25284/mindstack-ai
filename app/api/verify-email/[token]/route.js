@@ -16,6 +16,5 @@ export const GET = async (req, { params }) => {
     }
     user.isVerified = true;
     await user.save();
-    redirect("/login")
     return NextResponse.json({ message: "Email verified successfully", email:user.email  }, { status: 200 });
 }   
