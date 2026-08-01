@@ -18,13 +18,20 @@ export async function POST(req) {
             message: "Invalid OTP"
         }, { status: 400 });
     } else if (verified) {
-        const user = await User.findOne({ email: body.email, isVerified: true })
+        const user = await User.findOne({ email: body.email })
         if (!user) {
-            await verifyEmail(body.email);
             return NextResponse.json({
-                message: "User not found or you didn't verify your email"
+                message: "User not found"
             }, { status: 404 });
         }
+        if (user.isVerified == false) {
+            await verifyEmail(body.email)
+            return NextResponse.json({
+                message: "Please verify your email"
+            }, { status: 400 });
+        }
+        
+        
         const token = createToken(user._id);
         return NextResponse
             .json({

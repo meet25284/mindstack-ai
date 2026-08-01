@@ -3,9 +3,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Toast from '@/components/Toast';
 
 export default function LoginPage() {
     const router = useRouter();
+    const [toast, setToast] = useState(null);
 
     const [loginMethod, setLoginMethod] = useState('password'); // 'password' or 'otp'
     const [otpSent, setOtpSent] = useState(false);
@@ -108,6 +110,13 @@ export default function LoginPage() {
                 localStorage.setItem("token", result.token);
                 router.push('/chat');
             } else {
+                if (result.message == "Please verify your email") {
+                    setToast({
+                        type: "warning",
+                        message: "I have sent you verification email again. Check your inbox or spam folder.",
+                    });
+                    return;
+                }
                 setServerError(result.message || 'Login failed');
             }
         } catch (err) {
@@ -181,6 +190,13 @@ export default function LoginPage() {
                 router.push('/chat');
                 setFormData({ email: "", password: "", otp: "" });
             } else {
+                if (result.message == "Please verify your email") {
+                    setToast({
+                        type: "warning",
+                        message: "I have sent you verification email again. Check your inbox or spam folder.",
+                    });
+                    return;
+                }
                 setServerError(result.message || 'OTP Verification failed');
             }
         } catch (err) {
@@ -235,11 +251,10 @@ export default function LoginPage() {
                                     type="email"
                                     name="email"
                                     id="email"
-                                    className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${
-                                        touched.email && fieldErrors.email
+                                    className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${touched.email && fieldErrors.email
                                             ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
                                             : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
-                                    }`}
+                                        }`}
                                     placeholder="Email Address"
                                     value={formData.email}
                                     onChange={handleChange}
@@ -259,11 +274,10 @@ export default function LoginPage() {
                                         type="password"
                                         name="password"
                                         id="password"
-                                        className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${
-                                            touched.password && fieldErrors.password
+                                        className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm ${touched.password && fieldErrors.password
                                                 ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
                                                 : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
-                                        }`}
+                                            }`}
                                         placeholder="Password"
                                         value={formData.password}
                                         onChange={handleChange}
@@ -283,11 +297,10 @@ export default function LoginPage() {
                                         type="text"
                                         name="otp"
                                         id="otp"
-                                        className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm text-center tracking-widest text-lg ${
-                                            touched.otp && fieldErrors.otp
+                                        className={`block w-full px-4 py-3 border rounded-xl leading-5 bg-gray-900/50 text-gray-200 placeholder-gray-500 focus:outline-none transition-all duration-300 sm:text-sm text-center tracking-widest text-lg ${touched.otp && fieldErrors.otp
                                                 ? 'border-red-500 focus:ring-2 focus:ring-red-500/50'
                                                 : 'border-gray-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500'
-                                        }`}
+                                            }`}
                                         placeholder="Enter 6-digit OTP"
                                         value={formData.otp}
                                         onChange={handleChange}
@@ -355,6 +368,7 @@ export default function LoginPage() {
                     <p>By logging in, you agree to our Terms of Service and Privacy Policy.</p>
                 </div>
             </div>
+            <Toast toast={toast} onClose={() => setToast(null)} />
 
             <style dangerouslySetInnerHTML={{
                 __html: `

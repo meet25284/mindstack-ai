@@ -3,9 +3,12 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Toast from "@/components/Toast";
+
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [toast, setToast] = useState(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -110,7 +113,13 @@ export default function RegisterPage() {
       if (result.success) {
         setFormData({ name: "", email: "", password: "" });
         setTouched({ name: false, email: false, password: false });
-        router.push('/login');
+        setToast({
+          type: "success",
+          message: "Go and check your email to verify your account. Check your inbox or spam folder.",
+        });
+        setTimeout(() => {
+          router.push('/login');
+        }, 5000);
       } else {
         setServerError(result.message || 'Registration failed');
       }
@@ -251,6 +260,7 @@ export default function RegisterPage() {
           <p>By registering, you agree to our Terms of Service and Privacy Policy.</p>
         </div>
       </div>
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       <style dangerouslySetInnerHTML={{
         __html: `

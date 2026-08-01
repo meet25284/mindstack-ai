@@ -21,15 +21,19 @@ export async function POST(req) {
       );
     }
 
-    const user = await User.findOne({ email: data.email, isVerified: true });
-
-    if (!user) {
-      await verifyEmail(data.email);
-      return NextResponse.json(
-        { message: "User not found or you didn't verify your email" },
-        { status: 404 }
-      );
-    }
+    const user = await User.findOne({ email: body.email })
+        if (!user) {
+            return NextResponse.json({
+                message: "User not found"
+            }, { status: 404 });
+        }
+        if (user.isVerified == false) {
+            await verifyEmail(body.email)
+            return NextResponse.json({
+                message: "Please verify your email"
+            }, { status: 400 });
+        }
+        
 
     const isPasswordValid = await bcrypt.compare(
       data.password,
