@@ -1,6 +1,7 @@
 import User from "@/models/users";
 import { verifyToken } from "@/services/jwt";
 import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 export const GET = async (req, { params }) => {
     const token = (await params).token;
     const decodedToken = verifyToken(token);
@@ -16,4 +17,5 @@ export const GET = async (req, { params }) => {
     user.isVerified = true;
     await user.save();
     redirect("/login")
+    return NextResponse.json({ message: "Email verified successfully", email:user.email  }, { status: 200 });
 }   

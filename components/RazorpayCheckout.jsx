@@ -155,6 +155,7 @@ export default function RazorpayCheckout({
         prefill: { email },
         theme: { color: '#6366f1' },
       };
+      console.log("🚀 ~ handleCheckout ~ options:", options)
 
       const rzp = new window.Razorpay(options);
       rzp.open();
