@@ -26,7 +26,8 @@ MindStack AI is a full-stack RAG (Retrieval-Augmented Generation) SaaS applicati
 
 ## Screenshots
 
-<!-- add screenshot/gif here -->
+<img width="1924" height="959" alt="Screenshot from 2026-08-03 10-09-46" src="https://github.com/user-attachments/assets/3f10819b-9fa0-4c9f-ba9a-fe9bc14d330b" />
+
 
 ---
 
@@ -54,10 +55,8 @@ MindStack AI is a full-stack RAG (Retrieval-Augmented Generation) SaaS applicati
 
 ## Live Demo
 
-<!-- add live demo link here -->
+[mindstack.ai](https://mindstack-ai-swart.vercel.app/)
 
 ---
 
-## License
 
-See `LICENSE` if present in the repository.
