@@ -54,10 +54,19 @@ export async function generateTitle(prompt) {
 
   try {
     const { text, usage: tokenUsage } = await generateText({
-      model,
-      system:
-        "Generate a very short chat title (maximum 4 words, no quotes, no markdown).",
-      prompt: prompt,
+      model: openai("gpt-4o-mini"),
+      system: `
+You are a chat title generator.
+
+Rules:
+- Generate a title of at most 4 words.
+- Never answer the user's question.
+- Never explain anything.
+- Output only the title.
+- No punctuation, quotes, or markdown.
+`,
+      prompt,
+      temperature: 0,
     });
 
     usage.set("title", {
