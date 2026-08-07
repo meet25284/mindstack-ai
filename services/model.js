@@ -34,7 +34,7 @@ function resetUsage() {
   });
 }
 
-const model = openai("gpt-5-mini");
+const model = openai("gpt-5-nano");
 
 export async function generateBatchEmbeddings(text) {
   const values = Array.isArray(text) ? text : [text];
